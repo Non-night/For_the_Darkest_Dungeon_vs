@@ -121,61 +121,54 @@ namespace For_the_Darkest_Dungeon.Classification
 		/// name 长度检查辅助函数
 		/// </summary>
 		private bool TryGetNameValueInfo(
-	        string lineText,
-	        int keywordStart,
-	        int keywordLength,
-	        List<Span> stringSpans,
-	        out int valueLength,
-	        out int valueStart,
-	        out int valueSpanLength)
+	string lineText,
+	int keywordStart,
+	int keywordLength,
+	List<Span> stringSpans,
+	out int valueLength,
+	out int valueStart,
+	out int valueSpanLength,
+	out bool isQuoted) // 新增
 		{
 			valueLength = 0;
 			valueStart = -1;
 			valueSpanLength = 0;
+			isQuoted = false;
 
 			int pos = keywordStart + keywordLength;
 
-			// 跳过 .name 后面的空白
+			// 跳过空白
 			while (pos < lineText.Length && char.IsWhiteSpace(lineText[pos]))
 				pos++;
 
 			if (pos >= lineText.Length)
 				return false;
 
-			// 情况 1：有引号，统计引号内字符长度
 			if (lineText[pos] == '"')
 			{
+				isQuoted = true;
 				int quoteStart = pos;
 				int quoteEnd = lineText.IndexOf('"', quoteStart + 1);
-
-				// 没有右引号，就统计到行尾
 				if (quoteEnd < 0)
 					quoteEnd = lineText.Length;
 
 				valueStart = quoteStart + 1;
-				valueSpanLength = Math.Max(0, quoteEnd - quoteStart - 1);
+				valueSpanLength = Math.Max(0, quoteEnd - valueStart);
 				valueLength = valueSpanLength;
 				return true;
 			}
 
-			// 情况 2：无引号
-			// 从 .name 参数开始，直到下一个合法 .keyword 或 // 注释为止
+			// 无引号情况
 			int end = lineText.Length;
-
 			int commentIndex = lineText.IndexOf("//", pos, StringComparison.Ordinal);
 			if (commentIndex >= 0)
 				end = commentIndex;
 
 			foreach (Match nextMatch in _keywordRegex.Matches(lineText))
 			{
-				if (nextMatch.Index <= pos)
-					continue;
-
-				if (stringSpans.Any(s => s.Contains(nextMatch.Index)))
-					continue;
-
-				if (nextMatch.Index > 0 && char.IsDigit(lineText[nextMatch.Index - 1]))
-					continue;
+				if (nextMatch.Index <= pos) continue;
+				if (stringSpans.Any(s => s.Contains(nextMatch.Index))) continue;
+				if (nextMatch.Index > 0 && char.IsDigit(lineText[nextMatch.Index - 1])) continue;
 
 				end = Math.Min(end, nextMatch.Index);
 				break;
@@ -183,7 +176,6 @@ namespace For_the_Darkest_Dungeon.Classification
 
 			string rawValue = lineText.Substring(pos, end - pos);
 
-			// 去掉首尾空白用于定位 span
 			int leadingSpaces = 0;
 			while (leadingSpaces < rawValue.Length && char.IsWhiteSpace(rawValue[leadingSpaces]))
 				leadingSpaces++;
@@ -200,7 +192,7 @@ namespace For_the_Darkest_Dungeon.Classification
 
 			string trimmedValue = lineText.Substring(valueStart, valueSpanLength);
 
-			// 无引号情况：排除所有空白字符后再计算长度
+			// 无引号情况长度排除空白
 			valueLength = trimmedValue.Count(c => !char.IsWhiteSpace(c));
 
 			return true;
@@ -312,30 +304,40 @@ namespace For_the_Darkest_Dungeon.Classification
 								stringSpans,
 								out int nameLength,
 								out int nameValueStart,
-								out int nameValueSpanLength))
+								out int nameValueSpanLength,
+								out bool isQuoted)) // 新增返回参数表示是否带引号
 							{
-								if (nameLength > 64)
+								string nameValue = lineText.Substring(nameValueStart, nameValueSpanLength);
+
+								if (!isQuoted && nameValue.Any(c => char.IsWhiteSpace(c)))
 								{
+									// 无引号且出现空格/制表符 → 报错
 									yield return new TagSpan<IErrorTag>(
 										new SnapshotSpan(snapshot, line.Start + nameValueStart, nameValueSpanLength),
 										new ErrorTag(
 											PredefinedErrorTypeNames.SyntaxError,
-											$".name 的名称长度不能超过 64 个字符，当前长度为 {nameLength}")
-									);
-
-									continue;
+											$".name 参数无引号时不能包含空白字符: '{nameValue}'"));
 								}
-								else if (nameLength == 64)
+								else
 								{
-									yield return new TagSpan<IErrorTag>(
-										new SnapshotSpan(snapshot, line.Start + nameValueStart, nameValueSpanLength),
-										new ErrorTag(
-											PredefinedErrorTypeNames.Warning,
-											$".name 的名称长度已经达到 64 个字符，建议缩短")
-									);
-
-									// 注意：这里不要 continue
-									// 因为 64 只是警告，后续参数检查仍可继续
+									// 长度判断
+									int actualLength = nameValue.Count(c => !char.IsWhiteSpace(c));
+									if (actualLength == 64)
+									{
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, line.Start + nameValueStart, nameValueSpanLength),
+											new ErrorTag(
+												PredefinedErrorTypeNames.Warning,
+												$".name 的名称长度已经达到 64 个字符，建议缩短"));
+									}
+									else if (actualLength > 64)
+									{
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, line.Start + nameValueStart, nameValueSpanLength),
+											new ErrorTag(
+												PredefinedErrorTypeNames.SyntaxError,
+												$".name 的名称长度不能超过 64 个字符，当前长度为 {actualLength}"));
+									}
 								}
 							}
 						}
@@ -376,11 +378,18 @@ namespace For_the_Darkest_Dungeon.Classification
 
 									if (argValue.Any(char.IsWhiteSpace))
 									{
-										yield return new TagSpan<IErrorTag>(
-											new SnapshotSpan(snapshot, line.Start + argStart, argLength),
-											new ErrorTag(
-												PredefinedErrorTypeNames.SyntaxError,
-												$"{keyword} 引号内部参数不能包含空格或制表符: '{argValue}'"));
+										if (keyword == ".buff_ids")
+											yield return new TagSpan<IErrorTag>(
+												new SnapshotSpan(snapshot, line.Start + argStart, argLength),
+												new ErrorTag(
+													PredefinedErrorTypeNames.Warning,
+													$"{keyword} 引号内部参数强烈不建议包含空格或制表符: '{argValue}'"));
+										else
+											yield return new TagSpan<IErrorTag>(
+												new SnapshotSpan(snapshot, line.Start + argStart, argLength),
+												new ErrorTag(
+													PredefinedErrorTypeNames.SyntaxError,
+													$"{keyword} 引号内部参数不能包含空格或制表符: '{argValue}'"));
 									}
 
 									pos = quoteEnd < lineText.Length ? quoteEnd + 1 : lineText.Length;

@@ -63,6 +63,7 @@
     <Compile Include="Error\ArtErrorTagger.cs" />
     <Compile Include="Error\DarkestLegacyErrorListProvider.cs" />
     <Compile Include="Error\EffectErrorTagger.cs" />
+    <Compile Include="Error\InfoBaseErrorTagger.cs" />
     <Compile Include="Error\InfoErrorTagger.cs" />
     <Compile Include="Error\OverrideErrorTagger.cs" />
     <Compile Include="InfoCommandFilter.cs" />

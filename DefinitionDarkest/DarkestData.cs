@@ -817,5 +817,19 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             };
             return boolKeys.Contains(keyword);
         }
-    }
+
+		// 针对info中的参数长度相关数据
+        // 单字符串长度32
+		public static readonly HashSet<(string Header, string Keyword)> SingleString32 = new HashSet<(string Header, string Keyword)>
+		{
+            ( "display_modifier:", ".anim_override" ), ( "mode:", ".id" ), ( "mode:", ".bark_override_id" ),
+            ( "shape_shifter:", ".monster_class_ids" ), ( "death_class:", ".type" ), ( "incompatible_party_member:", ".id" ),
+            ( "extra_battle_loot:", ".code" ), ( "extra_curio_loot:", ".code" ), ( "restriction:", ".enabled_dlc" )
+		};
+        // 单字符串长度64
+        public static readonly HashSet<(string Header, string Keyword)> SingleString64 = new HashSet<(string Header, string Keyword)>
+        {
+
+        };
+	}
 }
