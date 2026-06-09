@@ -1,0 +1,2 @@
+# For_the_Darkest_Dungeon_vs
+写给VS2022/2026的暗黑地牢语言插件
