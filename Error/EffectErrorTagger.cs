@@ -25,22 +25,56 @@ namespace For_the_Darkest_Dungeon.Classification
             _buffer.Changed += OnBufferChanged;
         }
 
-        private void OnBufferChanged(object sender, TextContentChangedEventArgs e)
-        {
-            // 关键：当某一行改变时，必须通知编辑器刷新后面所有的行，
-            // 因为“effect:”前缀的存在决定了后面所有行的合法性。
-            var snapshot = e.After;
-            if (e.Changes.Count > 0)
-            {
-                var start = e.Changes.Min(c => c.NewSpan.Start);
-                TagsChanged?.Invoke(this, new SnapshotSpanEventArgs(new SnapshotSpan(snapshot, start, snapshot.Length - start)));
-            }
-        }
+		private void OnBufferChanged(object sender, TextContentChangedEventArgs e)
+		{
+			var snapshot = e.After;
+			if (e.Changes.Count == 0)
+				return;
 
-        /// <summary>
-        /// 向上寻找该行是否属于一个 effect 块
-        /// </summary>
-        private bool IsInsideEffectBlock(ITextSnapshot snapshot, int fromLineNumber)
+			int start = e.Changes.Min(c => c.NewSpan.Start);
+			int end = e.Changes.Max(c => c.NewSpan.End);
+
+			ITextSnapshotLine startLine = snapshot.GetLineFromPosition(Math.Min(start, snapshot.Length));
+			ITextSnapshotLine endLine = snapshot.GetLineFromPosition(Math.Min(end, snapshot.Length));
+
+			bool needsFullTailRefresh = e.Changes.Any(c =>
+			{
+				string newText = c.NewText ?? "";
+				string oldText = c.OldText ?? "";
+
+				// 换行变化可能影响块结构
+				if (newText.Contains("\n") || newText.Contains("\r") ||
+					oldText.Contains("\n") || oldText.Contains("\r"))
+					return true;
+
+				// 当前修改涉及 effect: / 冒号结构，才刷新后续
+				string changedLineText = startLine.GetText();
+				return changedLineText.Contains("effect:") || changedLineText.Contains(":");
+			});
+
+			if (needsFullTailRefresh)
+			{
+				TagsChanged?.Invoke(
+					this,
+					new SnapshotSpanEventArgs(
+						new SnapshotSpan(snapshot, startLine.Start, snapshot.Length - startLine.Start)));
+			}
+			else
+			{
+				int spanStart = startLine.Start.Position;
+				int spanEnd = endLine.End.Position;
+
+				TagsChanged?.Invoke(
+					this,
+					new SnapshotSpanEventArgs(
+						new SnapshotSpan(snapshot, spanStart, spanEnd - spanStart)));
+			}
+		}
+
+		/// <summary>
+		/// 向上寻找该行是否属于一个 effect 块
+		/// </summary>
+		private bool IsInsideEffectBlock(ITextSnapshot snapshot, int fromLineNumber)
         {
             // 向上遍历，直到找到一个包含冒号的行
             for (int i = fromLineNumber; i >= 0; i--)
@@ -83,7 +117,117 @@ namespace For_the_Darkest_Dungeon.Classification
             return -1;
         }
 
-        public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
+		/// <summary>
+		/// name 长度检查辅助函数
+		/// </summary>
+		private bool TryGetNameValueInfo(
+	        string lineText,
+	        int keywordStart,
+	        int keywordLength,
+	        List<Span> stringSpans,
+	        out int valueLength,
+	        out int valueStart,
+	        out int valueSpanLength)
+		{
+			valueLength = 0;
+			valueStart = -1;
+			valueSpanLength = 0;
+
+			int pos = keywordStart + keywordLength;
+
+			// 跳过 .name 后面的空白
+			while (pos < lineText.Length && char.IsWhiteSpace(lineText[pos]))
+				pos++;
+
+			if (pos >= lineText.Length)
+				return false;
+
+			// 情况 1：有引号，统计引号内字符长度
+			if (lineText[pos] == '"')
+			{
+				int quoteStart = pos;
+				int quoteEnd = lineText.IndexOf('"', quoteStart + 1);
+
+				// 没有右引号，就统计到行尾
+				if (quoteEnd < 0)
+					quoteEnd = lineText.Length;
+
+				valueStart = quoteStart + 1;
+				valueSpanLength = Math.Max(0, quoteEnd - quoteStart - 1);
+				valueLength = valueSpanLength;
+				return true;
+			}
+
+			// 情况 2：无引号
+			// 从 .name 参数开始，直到下一个合法 .keyword 或 // 注释为止
+			int end = lineText.Length;
+
+			int commentIndex = lineText.IndexOf("//", pos, StringComparison.Ordinal);
+			if (commentIndex >= 0)
+				end = commentIndex;
+
+			foreach (Match nextMatch in _keywordRegex.Matches(lineText))
+			{
+				if (nextMatch.Index <= pos)
+					continue;
+
+				if (stringSpans.Any(s => s.Contains(nextMatch.Index)))
+					continue;
+
+				if (nextMatch.Index > 0 && char.IsDigit(lineText[nextMatch.Index - 1]))
+					continue;
+
+				end = Math.Min(end, nextMatch.Index);
+				break;
+			}
+
+			string rawValue = lineText.Substring(pos, end - pos);
+
+			// 去掉首尾空白用于定位 span
+			int leadingSpaces = 0;
+			while (leadingSpaces < rawValue.Length && char.IsWhiteSpace(rawValue[leadingSpaces]))
+				leadingSpaces++;
+
+			int trailingSpaces = rawValue.Length - 1;
+			while (trailingSpaces >= leadingSpaces && char.IsWhiteSpace(rawValue[trailingSpaces]))
+				trailingSpaces--;
+
+			if (trailingSpaces < leadingSpaces)
+				return false;
+
+			valueStart = pos + leadingSpaces;
+			valueSpanLength = trailingSpaces - leadingSpaces + 1;
+
+			string trimmedValue = lineText.Substring(valueStart, valueSpanLength);
+
+			// 无引号情况：排除所有空白字符后再计算长度
+			valueLength = trimmedValue.Count(c => !char.IsWhiteSpace(c));
+
+			return true;
+		}
+
+		/// <summary>
+		/// buff_ids/set_monster_class_ids 长度检查辅助函数
+		/// </summary>
+		private bool IsKeywordStartAt(string lineText, int pos)
+		{
+			if (pos < 0 || pos >= lineText.Length)
+				return false;
+
+			if (lineText[pos] != '.')
+				return false;
+
+			bool prevIsDigit = pos > 0 && char.IsDigit(lineText[pos - 1]);
+			bool nextIsDigit = pos + 1 < lineText.Length && char.IsDigit(lineText[pos + 1]);
+
+			if (prevIsDigit || nextIsDigit)
+				return false;
+
+			return pos + 1 < lineText.Length &&
+				   (char.IsLetter(lineText[pos + 1]) || lineText[pos + 1] == '_');
+		}
+
+		public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
         {
             foreach (var span in spans)
             {
@@ -159,7 +303,190 @@ namespace For_the_Darkest_Dungeon.Classification
                             continue;
                         }
 
-                        if (DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out List<string> validValues))
+						if (keyword == ".name")
+						{
+							if (TryGetNameValueInfo(
+								lineText,
+								match.Index,
+								match.Length,
+								stringSpans,
+								out int nameLength,
+								out int nameValueStart,
+								out int nameValueSpanLength))
+							{
+								if (nameLength > 64)
+								{
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + nameValueStart, nameValueSpanLength),
+										new ErrorTag(
+											PredefinedErrorTypeNames.SyntaxError,
+											$".name 的名称长度不能超过 64 个字符，当前长度为 {nameLength}")
+									);
+
+									continue;
+								}
+								else if (nameLength == 64)
+								{
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + nameValueStart, nameValueSpanLength),
+										new ErrorTag(
+											PredefinedErrorTypeNames.Warning,
+											$".name 的名称长度已经达到 64 个字符，建议缩短")
+									);
+
+									// 注意：这里不要 continue
+									// 因为 64 只是警告，后续参数检查仍可继续
+								}
+							}
+						}
+
+						if (keyword == ".buff_ids" || keyword == ".set_monster_class_ids")
+						{
+							int pos = match.Index + match.Length;
+							var args = new List<(int start, int length, string value)>();
+
+							while (pos < lineText.Length)
+							{
+								// 跳过空白
+								while (pos < lineText.Length && char.IsWhiteSpace(lineText[pos]))
+									pos++;
+
+								if (pos >= lineText.Length)
+									break;
+
+								// 遇到下一个 .keyword，说明当前关键字的参数结束
+								if (IsKeywordStartAt(lineText, pos))
+									break;
+
+								int argStart = pos;
+								int argLength;
+								string argValue;
+
+								if (lineText[pos] == '"')
+								{
+									int quoteStart = pos;
+									int quoteEnd = lineText.IndexOf('"', quoteStart + 1);
+
+									if (quoteEnd < 0)
+										quoteEnd = lineText.Length;
+
+									argStart = quoteStart + 1;
+									argLength = Math.Max(0, quoteEnd - argStart);
+									argValue = lineText.Substring(argStart, argLength);
+
+									if (argValue.Any(char.IsWhiteSpace))
+									{
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, line.Start + argStart, argLength),
+											new ErrorTag(
+												PredefinedErrorTypeNames.SyntaxError,
+												$"{keyword} 引号内部参数不能包含空格或制表符: '{argValue}'"));
+									}
+
+									pos = quoteEnd < lineText.Length ? quoteEnd + 1 : lineText.Length;
+								}
+								else
+								{
+									int argEnd = pos;
+									while (argEnd < lineText.Length && !char.IsWhiteSpace(lineText[argEnd]))
+										argEnd++;
+
+									argLength = argEnd - pos;
+									argValue = lineText.Substring(pos, argLength);
+									pos = argEnd;
+								}
+
+								args.Add((argStart, argLength, argValue));
+
+								if (args.Count >= 9)
+									break;
+							}
+
+							foreach (var (start, length, value) in args)
+							{
+								int actualLength = value.Count(c => !char.IsWhiteSpace(c) && c != '"');
+
+								if (actualLength == 64)
+								{
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + start, length),
+										new ErrorTag(
+											PredefinedErrorTypeNames.Warning,
+											$"{keyword} 参数长度已经达到 64 个字符，建议缩短"));
+								}
+								else if (actualLength > 64)
+								{
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + start, length),
+										new ErrorTag(
+											PredefinedErrorTypeNames.SyntaxError,
+											$"{keyword} 参数长度不能超过 64 个字符，当前长度为 {actualLength}"));
+								}
+							}
+
+							if (args.Count > 8)
+							{
+								if (keyword == ".buff_ids")
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+										new ErrorTag(
+											PredefinedErrorTypeNames.SyntaxError,
+											$"{keyword} 参数数量不能超过 8 个，当前数量为 {args.Count}，建议采用分行写法"));
+								else
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+										new ErrorTag(
+											PredefinedErrorTypeNames.SyntaxError,
+											$"{keyword} 参数数量不能超过 8 个，当前数量为 {args.Count}"));
+							}
+							else if (args.Count == 8)
+							{
+								yield return new TagSpan<IErrorTag>(
+									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+									new ErrorTag(
+										PredefinedErrorTypeNames.Warning,
+										$"{keyword} 参数数量已达到 8 个，建议不要再增加参数"));
+							}
+						}
+
+						if (keyword == ".spawn_target_actor_base_class_id")
+						{
+							int keywordIndex = match.Index;
+
+							// 从 .spawn_target_actor_base_class_id 向前扫描到第一个 effect:
+							int scanPos = keywordIndex - 1;
+							bool targetFound = false;
+
+							while (scanPos >= 0)
+							{
+								// 找到 effect: 就停止
+								if (scanPos + 7 <= lineText.Length &&
+	                                string.Compare(lineText, scanPos, "effect:", 0, 7, StringComparison.OrdinalIgnoreCase) == 0)
+									break;
+
+								// 检查 .target 出现
+								if (scanPos + 7 <= lineText.Length && 
+									string.Compare(lineText, scanPos, ".target", 0, 7, StringComparison.Ordinal) == 0)
+								{
+									targetFound = true;
+									break;
+								}
+
+								scanPos--;
+							}
+
+							if (targetFound)
+							{
+								string errorMsg = ".spawn_target_actor_base_class_id 必须写在 .target 前，否则 spawn 定向不能生效";
+
+								var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+								yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
+
+								continue; // 这条关键字已报错，跳过后续检查
+							}
+						}
+
+						if (DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out List<string> validValues))
                         {
                             var remainingText = lineText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
