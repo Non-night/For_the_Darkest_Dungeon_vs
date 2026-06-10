@@ -19,7 +19,16 @@ namespace For_the_Darkest_Dungeon.Classification
         private readonly Regex _stringRegex = new Regex(@"""([^""]*)""", RegexOptions.Compiled);
         private readonly Regex _nextParamRegex = new Regex(@"^\s+(?:""([^""]*)""|([a-zA-Z0-9_]+))", RegexOptions.Compiled);
 
-        internal EffectErrorTagger(ITextBuffer buffer)
+		private static readonly string[] DotKeywordsToCheck = new[]
+		{
+			".dotBleed",
+			".dotPoison",
+			".dotStress",
+			".dotHpHeal",
+			".dotShuffle"
+		};
+
+		internal EffectErrorTagger(ITextBuffer buffer)
         {
             _buffer = buffer;
             _buffer.Changed += OnBufferChanged;
@@ -357,6 +366,51 @@ namespace For_the_Darkest_Dungeon.Classification
 			return false;
 		}
 
+		/// <summary>
+		/// 从当前关键字之后，查找同一行 codeText 中是否还存在某个目标关键字。
+		///
+		/// 用途示例：
+		/// .heal 1 .healstress 1
+		/// 当当前关键字是 .heal 时，向后查找是否存在 .healstress。
+		///
+		/// 注意：
+		/// 1. 只检查 currentKeywordIndex 之后的关键字；
+		/// 2. 忽略字符串内部的关键字；
+		/// 3. 忽略类似 1.xxx 这种小数/数字伪关键字；
+		/// 4. 使用 Match.Value 精确比较，因此 .heal_percent 不会被当成 .heal。
+		/// </summary>
+		private bool HasLaterKeyword(
+			string codeText,
+			int currentKeywordIndex,
+			string targetKeyword,
+			List<Span> stringSpans)
+		{
+			foreach (Match laterMatch in _keywordRegex.Matches(codeText))
+			{
+				// 只看当前关键字之后的内容。
+				if (laterMatch.Index <= currentKeywordIndex)
+					continue;
+
+				// 必须精确等于目标关键字。
+				// 例如 targetKeyword 是 ".healstress"，
+				// 那么 ".healstress_percent" 不会被误判。
+				if (!string.Equals(laterMatch.Value, targetKeyword, StringComparison.Ordinal))
+					continue;
+
+				// 忽略字符串内部的 .xxx。
+				if (stringSpans.Any(s => s.Contains(laterMatch.Index)))
+					continue;
+
+				// 忽略数字小数等情况，例如 1.xxx。
+				if (laterMatch.Index > 0 && char.IsDigit(codeText[laterMatch.Index - 1]))
+					continue;
+
+				return true;
+			}
+
+			return false;
+		}
+
 		public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
         {
             foreach (var span in spans)
@@ -458,7 +512,9 @@ namespace For_the_Darkest_Dungeon.Classification
                     var stringMatches = _stringRegex.Matches(codeText).Cast<Match>().ToList();
                     var stringSpans = stringMatches.Select(m => new Span(m.Index, m.Length)).ToList();
 
-                    foreach (Match match in _keywordRegex.Matches(codeText))
+					var seenDotKeywords = new Dictionary<string, Match>(StringComparer.Ordinal);
+
+					foreach (Match match in _keywordRegex.Matches(codeText))
                     {
                         if (stringSpans.Any(s => s.Contains(match.Index))) continue;
                         if (match.Index > 0 && char.IsDigit(codeText[match.Index - 1])) continue;
@@ -518,6 +574,73 @@ namespace For_the_Darkest_Dungeon.Classification
 									}
 								}
 							}
+						}
+
+						if (keyword == ".heal" &&
+							HasLaterKeyword(codeText, match.Index, ".healstress", stringSpans))
+						{
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(
+									PredefinedErrorTypeNames.SyntaxError,
+									".heal 写在 .healstress 前时不生效"));
+
+							continue;
+						}
+
+						if (keyword == ".cure")
+						{
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(
+									PredefinedErrorTypeNames.Suggestion,
+									"由于.cure可能存在一些问题，建议换用.cure_bleed和.cure_poison"));
+						}
+
+						if (keyword == ".cure" &&
+							HasLaterKeyword(codeText, match.Index, ".cure_disease", stringSpans))
+						{
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(
+									PredefinedErrorTypeNames.SyntaxError,
+									".cure 写在 .cure_disease 前时不生效，建议调整顺序或换用.cure_bleed和.cure_poison"));
+
+							continue;
+						}
+
+						// ------------------------------------------------------------
+						// dot 系列互斥检测：
+						//
+						// 这些关键字在同一个 effect 中不能同时出现任意两个：
+						// .dotBleed / .dotPoison / .dotStress / .dotHpHeal / .dotShuffle
+						//
+						// 示例：
+						// .dotBleed 1 .dotPoison 1
+						//   -> 对 .dotPoison 报错
+						// ------------------------------------------------------------
+						if (DotKeywordsToCheck.Contains(keyword))
+						{
+							Match firstDifferentDotMatch = seenDotKeywords
+								.Where(pair => !string.Equals(pair.Key, keyword, StringComparison.Ordinal))
+								.Select(pair => pair.Value)
+								.FirstOrDefault();
+
+							if (firstDifferentDotMatch != null)
+							{
+								string firstDotKeyword = firstDifferentDotMatch.Value;
+
+								yield return new TagSpan<IErrorTag>(
+									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+									new ErrorTag(
+										PredefinedErrorTypeNames.SyntaxError,
+										$"effect写法的流血、腐蚀、愈合、恐惧、延迟扰乱被写在同一行effect时，互相冲突，有且仅有一个效果能够生效，且结果与代码实际顺序无关。" +
+										$"当effect写法的流血、腐蚀、愈合、恐惧、延迟扰乱被写在同一行effect并因此互相冲突时，最终生效者基于一个既定的优先级顺序，该优先级为：腐蚀 > 流血 > 恐惧 > 延迟扰乱 > 愈合。"));
+							}
+
+							// 只记录第一次出现的位置，后续重复出现同一关键字不覆盖。
+							if (!seenDotKeywords.ContainsKey(keyword))
+								seenDotKeywords.Add(keyword, match);
 						}
 
 						if (keyword == ".buff_ids" || keyword == ".set_monster_class_ids")

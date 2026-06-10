@@ -115,7 +115,7 @@ namespace For_the_Darkest_Dungeon.Error
 			RaiseTagsChanged(quickRefreshSpan);
 
 			// ------------------------------------------------------------
-			// 2. 300ms 防抖后刷新整个文件
+			// 2. 250ms 防抖后刷新整个文件
 			// ------------------------------------------------------------
 			CancellationToken token;
 
@@ -132,7 +132,7 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
-		/// 延迟 300ms 后刷新整份文件。
+		/// 延迟 250ms 后刷新整份文件。
 		///
 		/// 连续输入时，前一个任务会被取消，因此只有用户停顿下来后，
 		/// 才会触发一次全文件刷新。
@@ -141,7 +141,7 @@ namespace For_the_Darkest_Dungeon.Error
 		{
 			try
 			{
-				await Task.Delay(300, token);
+				await Task.Delay(250, token);
 
 				if (token.IsCancellationRequested)
 					return;
@@ -286,6 +286,21 @@ namespace For_the_Darkest_Dungeon.Error
 		{
 			if (spans.Count == 0)
 				yield break;
+
+			// ------------------------------------------------------------
+			// 整文件级 death_class 互斥关键字检查。
+			//
+			// 这个规则不能只在当前行 / 当前 span 中检查，
+			// 因为 .monster_class_id 和 .random_monster_class_ids
+			// 可能出现在两个不同的 death_class: 块中。
+			//
+			// 所以这里先基于当前 snapshot 扫描整个文件。
+			// 但实际返回 Tag 时，只返回和 requested spans 相交的错误，
+			// 避免 GetTags 请求局部范围时返回不相关位置的 Tag。
+			// ------------------------------------------------------------
+			ITextSnapshot wholeSnapshot = spans[0].Snapshot;
+			foreach (var globalError in ValidateDeathClassMonsterClassConflict(wholeSnapshot, spans))
+				yield return globalError;
 
 			foreach (var span in spans)
 			{
@@ -464,9 +479,148 @@ namespace For_the_Darkest_Dungeon.Error
 								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
 								new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
 						}
+						else if (keyword == ".was_killed_effects")
+						{
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(PredefinedErrorTypeNames.SyntaxError,
+								"请勿使用.was_killed_effects，以防引发真伤等各种击杀情况导致的游戏崩溃，请换用.was_killed_by_hero_effects或其他效果作为替代"));
+						}
 					}
 				}
 			}
+		}
+
+		/// <summary>
+		/// 整文件检查：
+		/// 在整个文件中，如果 death_class: Header 下同时出现：
+		/// - .monster_class_id
+		/// - .random_monster_class_ids
+		///
+		/// 则报错。
+		///
+		/// 注意：
+		/// 1. 两个关键字不要求在同一个 death_class: 块里；
+		/// 2. 只要它们的所属 Header 都是 death_class:，就算冲突；
+		/// 3. 注释后的内容不参与检查；
+		/// 4. 字符串内部的 .xxx 不参与检查；
+		/// 5. 这里扫描整个 snapshot，但只返回和 requestedSpans 相交的错误 Tag。
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> ValidateDeathClassMonsterClassConflict(
+			ITextSnapshot snapshot,
+			NormalizedSnapshotSpanCollection requestedSpans)
+		{
+			bool foundMonsterClassId = false;
+			bool foundRandomMonsterClassIds = false;
+
+			SnapshotSpan monsterClassIdSpan = default(SnapshotSpan);
+			SnapshotSpan randomMonsterClassIdsSpan = default(SnapshotSpan);
+
+			string currentHeader = null;
+
+			for (int i = 0; i < snapshot.LineCount; i++)
+			{
+				ITextSnapshotLine line = snapshot.GetLineFromLineNumber(i);
+				string lineText = line.GetText();
+
+				// 复用当前文件的注释规则：
+				// 只检查 // 前面的内容。
+				string codeText = GetCodeTextBeforeComment(lineText);
+
+				if (string.IsNullOrWhiteSpace(codeText))
+					continue;
+
+				// 如果当前行是 Header 行，更新当前所属 Header。
+				// HeaderRegex 会保留冒号，例如 death_class:。
+				RegexMatch headerMatch = HeaderRegex.Match(codeText);
+				if (headerMatch.Success)
+				{
+					currentHeader = headerMatch.Value;
+				}
+
+				// 只检查 death_class: 下的关键字。
+				if (!string.Equals(currentHeader, "death_class:", StringComparison.Ordinal))
+					continue;
+
+				List<Span> stringSpans = GetStringSpans(codeText);
+
+				foreach (RegexMatch match in KeywordRegex.Matches(codeText))
+				{
+					// 忽略字符串内部的 .xxx。
+					if (stringSpans.Any(s => s.Contains(match.Index)))
+						continue;
+
+					// 忽略数字小数等情况，例如 1.xxx。
+					if (match.Index > 0 && char.IsDigit(codeText[match.Index - 1]))
+						continue;
+
+					string keyword = match.Value;
+
+					if (keyword == ".monster_class_id" && !foundMonsterClassId)
+					{
+						foundMonsterClassId = true;
+						monsterClassIdSpan = new SnapshotSpan(
+							snapshot,
+							line.Start.Position + match.Index,
+							match.Length);
+					}
+					else if (keyword == ".random_monster_class_ids" && !foundRandomMonsterClassIds)
+					{
+						foundRandomMonsterClassIds = true;
+						randomMonsterClassIdsSpan = new SnapshotSpan(
+							snapshot,
+							line.Start.Position + match.Index,
+							match.Length);
+					}
+
+					// 两个都找到了，就可以停止扫描。
+					if (foundMonsterClassId && foundRandomMonsterClassIds)
+						break;
+				}
+
+				if (foundMonsterClassId && foundRandomMonsterClassIds)
+					break;
+			}
+
+			if (!foundMonsterClassId || !foundRandomMonsterClassIds)
+				yield break;
+
+			const string message =
+				"death_class: 下不能同时使用 .monster_class_id 与 .random_monster_class_ids";
+
+			// 为了让两个位置都能看到问题，这里两个关键字都报错。
+			if (IntersectsAnyRequestedSpan(monsterClassIdSpan, requestedSpans))
+			{
+				yield return new TagSpan<IErrorTag>(
+					monsterClassIdSpan,
+					new ErrorTag(PredefinedErrorTypeNames.SyntaxError, message));
+			}
+
+			if (IntersectsAnyRequestedSpan(randomMonsterClassIdsSpan, requestedSpans))
+			{
+				yield return new TagSpan<IErrorTag>(
+					randomMonsterClassIdsSpan,
+					new ErrorTag(PredefinedErrorTypeNames.SyntaxError, message));
+			}
+		}
+
+		/// <summary>
+		/// 判断一个错误 Span 是否和 VS 当前请求的 spans 相交。
+		///
+		/// GetTags 可能只请求可见区域或局部范围，
+		/// 所以整文件扫描后不能无脑返回所有位置的 Tag。
+		/// </summary>
+		private bool IntersectsAnyRequestedSpan(
+			SnapshotSpan errorSpan,
+			NormalizedSnapshotSpanCollection requestedSpans)
+		{
+			foreach (SnapshotSpan requestedSpan in requestedSpans)
+			{
+				if (requestedSpan.IntersectsWith(errorSpan))
+					return true;
+			}
+
+			return false;
 		}
 
 		#region Header / keyword 检查
@@ -734,11 +888,23 @@ namespace For_the_Darkest_Dungeon.Error
 				{
 					if (!validValues.Contains(value))
 					{
-						yield return CreateError(
-							snapshot,
-							arg.StartPosition,
-							arg.Length,
-							$"参数 '{value}' 对关键字 '{keyword}' 无效");
+						// 额外进行一个特判，技能 type 允许自定义
+						if (AllowedEffectsHeaders.Contains(currentHeader) && keyword == ".type")
+						{
+							yield return CreateSuggestion(
+								snapshot,
+								arg.StartPosition,
+								arg.Length,
+								"若为自定义类型技能且该技能非友方技能，会导致其无法享受近战/远程类增益，也无法触发相关 Trigger");
+						}
+						else
+						{
+							yield return CreateError(
+								snapshot,
+								arg.StartPosition,
+								arg.Length,
+								$"参数 '{value}' 对关键字 '{keyword}' 无效");
+						}
 					}
 				}
 			}
@@ -994,6 +1160,22 @@ namespace For_the_Darkest_Dungeon.Error
 			return new TagSpan<IErrorTag>(
 				span,
 				new ErrorTag(PredefinedErrorTypeNames.Warning, message));
+		}
+
+		/// <summary>
+		/// 创建 Suggestion 级别的错误标签
+		/// </summary>
+		private TagSpan<IErrorTag> CreateSuggestion(
+			ITextSnapshot snapshot,
+			int startPosition,
+			int length,
+			string message)
+		{
+			SnapshotSpan span = CreateSafeSpan(snapshot, startPosition, length);
+
+			return new TagSpan<IErrorTag>(
+				span,
+				new ErrorTag(PredefinedErrorTypeNames.Suggestion, message));
 		}
 
 		/// <summary>
