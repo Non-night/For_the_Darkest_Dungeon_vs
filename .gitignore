@@ -24,4 +24,6 @@ Thumbs.db
 # 自定义缓存或临时文件
 *.tmp
 *.bak
-*.vsixmanifest
+
+*.secrets
+secrets.json

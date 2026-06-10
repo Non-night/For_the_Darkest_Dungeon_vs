@@ -53,8 +53,9 @@ namespace For_the_Darkest_Dungeon.Error
 			new Regex(@"\.[a-zA-Z_][a-zA-Z0-9_]*", RegexOptions.Compiled);
 
 		// Header：skill: / combat_skill: / display_modifier:
+		// Header 里应允许前导空白
 		private static readonly Regex HeaderRegex =
-			new Regex(@"^[a-zA-Z0-9_]+:", RegexOptions.Compiled);
+			new Regex(@"^[ \t]*(?<header>[a-zA-Z0-9_]+:)", RegexOptions.Compiled);
 
 		// 字符串："..."
 		private static readonly Regex StringRegex =
@@ -268,6 +269,14 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
+		/// 取出真正的 header
+		/// </summary>
+		private string GetHeaderName(RegexMatch headerMatch)
+		{
+			return headerMatch.Groups["header"].Value;
+		}
+
+		/// <summary>
 		/// 安全触发 TagsChanged。
 		///
 		/// VS 会在收到这个事件后，重新调用 GetTags(...) 计算对应范围的错误。
@@ -354,7 +363,7 @@ namespace For_the_Darkest_Dungeon.Error
 					RegexMatch headerMatch = HeaderRegex.Match(codeText);
 					if (headerMatch.Success)
 					{
-						currentHeader = headerMatch.Value;
+						currentHeader = GetHeaderName(headerMatch);
 						currentLineIsHeader = true;
 					}
 
@@ -535,7 +544,7 @@ namespace For_the_Darkest_Dungeon.Error
 				RegexMatch headerMatch = HeaderRegex.Match(codeText);
 				if (headerMatch.Success)
 				{
-					currentHeader = headerMatch.Value;
+					currentHeader = GetHeaderName(headerMatch);
 				}
 
 				// 只检查 death_class: 下的关键字。
@@ -648,7 +657,7 @@ namespace For_the_Darkest_Dungeon.Error
 
 				RegexMatch headerMatch = HeaderRegex.Match(codeText);
 				if (headerMatch.Success)
-					return headerMatch.Value;
+					return GetHeaderName(headerMatch);
 			}
 
 			return null;

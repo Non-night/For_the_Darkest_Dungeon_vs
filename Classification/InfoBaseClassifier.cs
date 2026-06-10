@@ -29,7 +29,7 @@ namespace For_the_Darkest_Dungeon.Classification
 		protected readonly IClassificationTypeRegistryService _registry;
 
 		private static readonly Regex HeaderRegex =
-			new Regex(@"^[a-zA-Z0-9_]+:", RegexOptions.Compiled);
+			new Regex(@"^[ \t]*(?<header>[a-zA-Z0-9_]+:)", RegexOptions.Compiled);
 
 		private static readonly Regex KeywordRegex =
 			new Regex(@"\.[a-zA-Z0-9_]+", RegexOptions.Compiled);
@@ -101,12 +101,13 @@ namespace For_the_Darkest_Dungeon.Classification
 			foreach (RegexMatch match in HeaderRegex.Matches(codeText))
 			{
 				var type = _registry.GetClassificationType("darkest.header");
+				var headerGroup = match.Groups["header"];
 
 				list.Add(new ClassificationSpan(
 					new SnapshotSpan(
 						span.Snapshot,
-						span.Start + match.Index,
-						match.Length),
+						span.Start + headerGroup.Index,
+						headerGroup.Length),
 					type));
 			}
 
