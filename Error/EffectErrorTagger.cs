@@ -121,14 +121,14 @@ namespace For_the_Darkest_Dungeon.Classification
 		/// name 长度检查辅助函数
 		/// </summary>
 		private bool TryGetNameValueInfo(
-	string lineText,
-	int keywordStart,
-	int keywordLength,
-	List<Span> stringSpans,
-	out int valueLength,
-	out int valueStart,
-	out int valueSpanLength,
-	out bool isQuoted) // 新增
+			string lineText,
+			int keywordStart,
+			int keywordLength,
+			List<Span> stringSpans,
+			out int valueLength,
+			out int valueStart,
+			out int valueSpanLength,
+			out bool isQuoted) // 新增
 		{
 			valueLength = 0;
 			valueStart = -1;
@@ -160,9 +160,6 @@ namespace For_the_Darkest_Dungeon.Classification
 
 			// 无引号情况
 			int end = lineText.Length;
-			int commentIndex = lineText.IndexOf("//", pos, StringComparison.Ordinal);
-			if (commentIndex >= 0)
-				end = commentIndex;
 
 			foreach (Match nextMatch in _keywordRegex.Matches(lineText))
 			{
@@ -219,6 +216,147 @@ namespace For_the_Darkest_Dungeon.Classification
 				   (char.IsLetter(lineText[pos + 1]) || lineText[pos + 1] == '_');
 		}
 
+		/// <summary>
+		/// 检查 codeText 中是否存在中文字符或中文标点。
+		///
+		/// 重要规则：
+		/// - 传进来的必须是 codeText，也就是 // 前面的内容；
+		/// - 因此 // 后面的注释内容不会被检查；
+		/// - 会把连续中文字符合并成一个错误 Span，避免每个字都报一个错误；
+		/// - 支持常用 CJK 字符、扩展区生僻字、兼容汉字、常见中文标点和全角中文标点。
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> CreateChineseCharacterErrors(
+			ITextSnapshot snapshot,
+			ITextSnapshotLine line,
+			string codeText)
+		{
+			int start = -1;
+			int length = 0;
+
+			for (int i = 0; i < codeText.Length;)
+			{
+				if (IsChineseCharacterOrPunctuation(codeText, i, out int charLength))
+				{
+					if (start < 0)
+					{
+						start = i;
+						length = charLength;
+					}
+					else
+					{
+						length += charLength;
+					}
+
+					i += charLength;
+					continue;
+				}
+
+				if (start >= 0)
+				{
+					string badText = codeText.Substring(start, length);
+
+					yield return new TagSpan<IErrorTag>(
+						new SnapshotSpan(
+							snapshot,
+							line.Start.Position + start,
+							length),
+						new ErrorTag(
+							PredefinedErrorTypeNames.SyntaxError,
+							$"不允许出现中文字符或中文标点: {badText}"));
+
+					start = -1;
+					length = 0;
+				}
+
+				i++;
+			}
+
+			if (start >= 0)
+			{
+				string badText = codeText.Substring(start, length);
+
+				yield return new TagSpan<IErrorTag>(
+					new SnapshotSpan(
+						snapshot,
+						line.Start.Position + start,
+						length),
+					new ErrorTag(
+						PredefinedErrorTypeNames.SyntaxError,
+						$"不允许出现中文字符或中文标点: {badText}"));
+			}
+		}
+
+		/// <summary>
+		/// 判断指定位置是否是中文字符或中文标点。
+		///
+		/// 说明：
+		/// - BMP 内的常用汉字、扩展 A、兼容汉字直接通过 char 判断；
+		/// - 扩展 B/C/D/E/F/G/H 等生僻字位于 Unicode 辅助平面，需要处理代理对；
+		/// - 中文标点覆盖 CJK Symbols and Punctuation、Vertical Forms、CJK Compatibility Forms、
+		///   以及常见全角标点区间。
+		/// </summary>
+		private bool IsChineseCharacterOrPunctuation(string text, int index, out int charLength)
+		{
+			charLength = 1;
+
+			if (index < 0 || index >= text.Length)
+				return false;
+
+			int codePoint;
+
+			if (char.IsHighSurrogate(text[index]) &&
+				index + 1 < text.Length &&
+				char.IsLowSurrogate(text[index + 1]))
+			{
+				codePoint = char.ConvertToUtf32(text[index], text[index + 1]);
+				charLength = 2;
+			}
+			else
+			{
+				codePoint = text[index];
+			}
+
+			// 常用汉字与 BMP 内扩展区
+			if ((codePoint >= 0x3400 && codePoint <= 0x4DBF) ||   // CJK Extension A
+				(codePoint >= 0x4E00 && codePoint <= 0x9FFF) ||   // CJK Unified Ideographs
+				(codePoint >= 0xF900 && codePoint <= 0xFAFF))     // CJK Compatibility Ideographs
+			{
+				return true;
+			}
+
+			// 生僻字扩展区，位于 Unicode 辅助平面，需要代理对。
+			if ((codePoint >= 0x20000 && codePoint <= 0x2A6DF) || // Extension B
+				(codePoint >= 0x2A700 && codePoint <= 0x2B73F) || // Extension C
+				(codePoint >= 0x2B740 && codePoint <= 0x2B81F) || // Extension D
+				(codePoint >= 0x2B820 && codePoint <= 0x2CEAF) || // Extension E
+				(codePoint >= 0x2CEB0 && codePoint <= 0x2EBEF) || // Extension F
+				(codePoint >= 0x30000 && codePoint <= 0x3134F) || // Extension G
+				(codePoint >= 0x31350 && codePoint <= 0x323AF))   // Extension H
+			{
+				return true;
+			}
+
+			// 中文标点、书名号、顿号、中文括号、全角空格等。
+			if ((codePoint >= 0x3000 && codePoint <= 0x303F) ||   // CJK Symbols and Punctuation
+				(codePoint >= 0xFE10 && codePoint <= 0xFE1F) ||   // Vertical Forms
+				(codePoint >= 0xFE30 && codePoint <= 0xFE4F))     // CJK Compatibility Forms
+			{
+				return true;
+			}
+
+			// 常见全角中文标点。
+			// 不直接包含整个 FF00-FFEF，避免把全角英文字母/数字也全部算作中文。
+			if ((codePoint >= 0xFF01 && codePoint <= 0xFF0F) ||   // ！＂＃＄％＆＇（）＊＋，－．／
+				(codePoint >= 0xFF1A && codePoint <= 0xFF20) ||   // ：；＜＝＞？＠
+				(codePoint >= 0xFF3B && codePoint <= 0xFF40) ||   // ［＼］＾＿｀
+				(codePoint >= 0xFF5B && codePoint <= 0xFF65))     // ｛｜｝～｡､･｢｣
+			{
+				return true;
+			}
+
+			return false;
+		}
+
 		public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
         {
             foreach (var span in spans)
@@ -229,36 +367,76 @@ namespace For_the_Darkest_Dungeon.Classification
 
                 for (int i = startLine; i <= endLine; i++)
                 {
-                    var line = snapshot.GetLineFromLineNumber(i);
-                    string lineText = line.GetText();
+					var line = snapshot.GetLineFromLineNumber(i);
+					string lineText = line.GetText();
 
-                    // 1. 完全忽略空行和纯注释行（不产生任何错误）
-                    if (string.IsNullOrWhiteSpace(lineText) || lineText.TrimStart().StartsWith("//"))
-                        continue;
+					// ------------------------------------------------------------
+					// 注释至高优先级：
+					// 只要本行出现 //，无论它是否在引号内部，
+					// 从 // 开始到行尾都不参与任何报错判断。
+					// 注意：这里只影响“报错判断”，不会修改原始文本。
+					// SnapshotSpan 的位置仍然基于原始 lineText 的下标。
+					// ------------------------------------------------------------
+					int commentIndex = lineText.IndexOf("//", StringComparison.Ordinal);
+					string codeText = commentIndex >= 0
+						? lineText.Substring(0, commentIndex)
+						: lineText;
 
-                    int firstColonIndex = GetFirstLogicalColon(lineText);
+					// 空行、纯注释行不产生任何错误。
+					if (string.IsNullOrWhiteSpace(codeText))
+						continue;
 
-                    // 2. 结构校验
-                    if (firstColonIndex == -1)
+					// ------------------------------------------------------------
+					// 中文字符检查：
+					// 只检查 // 前面的 codeText。
+					// 因此注释里的中文允许存在，代码区的中文字符和中文标点全部报错。
+					// ------------------------------------------------------------
+					foreach (var chineseError in CreateChineseCharacterErrors(snapshot, line, codeText))
+						yield return chineseError;
+
+					// ------------------------------------------------------------
+					// 半边引号检查：
+					// 只检查 // 前面的 codeText，不跨行。
+					// 如果 codeText 内双引号数量是奇数，说明这一行有未闭合引号。
+					// ------------------------------------------------------------
+					int quoteCount = codeText.Count(c => c == '"');
+					if (quoteCount % 2 != 0)
+					{
+						int quoteIndex = codeText.LastIndexOf('"');
+
+						yield return new TagSpan<IErrorTag>(
+							new SnapshotSpan(
+								snapshot,
+								line.Start.Position + Math.Max(quoteIndex, 0),
+								quoteIndex >= 0 ? 1 : Math.Max(1, codeText.Length)),
+							new ErrorTag(
+								PredefinedErrorTypeNames.SyntaxError,
+								"单行内引号不成对"));
+					}
+
+					int firstColonIndex = GetFirstLogicalColon(codeText);
+
+					// 2. 结构校验
+					if (firstColonIndex == -1)
                     {
                         // 如果本行没有冒号，也不是空行，那么它必须位于某个 effect: 块下方
                         if (!IsInsideEffectBlock(snapshot, i - 1))
                         {
                             yield return new TagSpan<IErrorTag>(
-                                new SnapshotSpan(line.Start, line.Length),
+                                new SnapshotSpan(line.Start, codeText.Length),
                                 new ErrorTag(PredefinedErrorTypeNames.SyntaxError, "此行不属于任何 'effect:'")
                             );
                         }
                         else
                         {
-                            if (_keywordRegex.Match(lineText).Success)
+                            if (_keywordRegex.Match(codeText).Success)
                                 yield return new TagSpan<IErrorTag>(
-                                    new SnapshotSpan(line.Start, line.Length),
+                                    new SnapshotSpan(line.Start, codeText.Length),
                                     new ErrorTag(PredefinedErrorTypeNames.Warning, "建议单条effect不在内部换行，如有需求请尽量用分行写法")
                                 );
                             else
                                 yield return new TagSpan<IErrorTag>(
-                                    new SnapshotSpan(line.Start, line.Length),
+                                    new SnapshotSpan(line.Start, codeText.Length),
                                     new ErrorTag(PredefinedErrorTypeNames.SyntaxError, "错误内容")
                                 );
                         }
@@ -266,7 +444,7 @@ namespace For_the_Darkest_Dungeon.Classification
                     else
                     {
                         // 如果本行有冒号，它必须是 "effect:"
-                        string header = lineText.Substring(0, firstColonIndex + 1).Trim();
+                        string header = codeText.Substring(0, firstColonIndex + 1).Trim();
                         if (!header.Equals("effect:", StringComparison.OrdinalIgnoreCase))
                         {
                             yield return new TagSpan<IErrorTag>(
@@ -277,13 +455,13 @@ namespace For_the_Darkest_Dungeon.Classification
                     }
 
                     // 3. 关键字和参数校验
-                    var stringMatches = _stringRegex.Matches(lineText).Cast<Match>().ToList();
+                    var stringMatches = _stringRegex.Matches(codeText).Cast<Match>().ToList();
                     var stringSpans = stringMatches.Select(m => new Span(m.Index, m.Length)).ToList();
 
-                    foreach (Match match in _keywordRegex.Matches(lineText))
+                    foreach (Match match in _keywordRegex.Matches(codeText))
                     {
                         if (stringSpans.Any(s => s.Contains(match.Index))) continue;
-                        if (match.Index > 0 && char.IsDigit(lineText[match.Index - 1])) continue;
+                        if (match.Index > 0 && char.IsDigit(codeText[match.Index - 1])) continue;
 
                         string keyword = match.Value;
                         if (!DarkestEffectsData.AllKeywords.Contains(keyword))
@@ -298,7 +476,7 @@ namespace For_the_Darkest_Dungeon.Classification
 						if (keyword == ".name")
 						{
 							if (TryGetNameValueInfo(
-								lineText,
+								codeText,
 								match.Index,
 								match.Length,
 								stringSpans,
@@ -307,7 +485,7 @@ namespace For_the_Darkest_Dungeon.Classification
 								out int nameValueSpanLength,
 								out bool isQuoted)) // 新增返回参数表示是否带引号
 							{
-								string nameValue = lineText.Substring(nameValueStart, nameValueSpanLength);
+								string nameValue = codeText.Substring(nameValueStart, nameValueSpanLength);
 
 								if (!isQuoted && nameValue.Any(c => char.IsWhiteSpace(c)))
 								{
@@ -347,34 +525,34 @@ namespace For_the_Darkest_Dungeon.Classification
 							int pos = match.Index + match.Length;
 							var args = new List<(int start, int length, string value)>();
 
-							while (pos < lineText.Length)
+							while (pos < codeText.Length)
 							{
 								// 跳过空白
-								while (pos < lineText.Length && char.IsWhiteSpace(lineText[pos]))
+								while (pos < codeText.Length && char.IsWhiteSpace(codeText[pos]))
 									pos++;
 
-								if (pos >= lineText.Length)
+								if (pos >= codeText.Length)
 									break;
 
 								// 遇到下一个 .keyword，说明当前关键字的参数结束
-								if (IsKeywordStartAt(lineText, pos))
+								if (IsKeywordStartAt(codeText, pos))
 									break;
 
 								int argStart = pos;
 								int argLength;
 								string argValue;
 
-								if (lineText[pos] == '"')
+								if (codeText[pos] == '"')
 								{
 									int quoteStart = pos;
-									int quoteEnd = lineText.IndexOf('"', quoteStart + 1);
+									int quoteEnd = codeText.IndexOf('"', quoteStart + 1);
 
 									if (quoteEnd < 0)
-										quoteEnd = lineText.Length;
+										quoteEnd = codeText.Length;
 
 									argStart = quoteStart + 1;
 									argLength = Math.Max(0, quoteEnd - argStart);
-									argValue = lineText.Substring(argStart, argLength);
+									argValue = codeText.Substring(argStart, argLength);
 
 									if (argValue.Any(char.IsWhiteSpace))
 									{
@@ -392,16 +570,16 @@ namespace For_the_Darkest_Dungeon.Classification
 													$"{keyword} 引号内部参数不能包含空格或制表符: '{argValue}'"));
 									}
 
-									pos = quoteEnd < lineText.Length ? quoteEnd + 1 : lineText.Length;
+									pos = quoteEnd < codeText.Length ? quoteEnd + 1 : codeText.Length;
 								}
 								else
 								{
 									int argEnd = pos;
-									while (argEnd < lineText.Length && !char.IsWhiteSpace(lineText[argEnd]))
+									while (argEnd < codeText.Length && !char.IsWhiteSpace(codeText[argEnd]))
 										argEnd++;
 
 									argLength = argEnd - pos;
-									argValue = lineText.Substring(pos, argLength);
+									argValue = codeText.Substring(pos, argLength);
 									pos = argEnd;
 								}
 
@@ -453,7 +631,7 @@ namespace For_the_Darkest_Dungeon.Classification
 								yield return new TagSpan<IErrorTag>(
 									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
 									new ErrorTag(
-										PredefinedErrorTypeNames.Warning,
+										PredefinedErrorTypeNames.Suggestion,
 										$"{keyword} 参数数量已达到 8 个，建议不要再增加参数"));
 							}
 						}
@@ -469,13 +647,13 @@ namespace For_the_Darkest_Dungeon.Classification
 							while (scanPos >= 0)
 							{
 								// 找到 effect: 就停止
-								if (scanPos + 7 <= lineText.Length &&
-	                                string.Compare(lineText, scanPos, "effect:", 0, 7, StringComparison.OrdinalIgnoreCase) == 0)
+								if (scanPos + 7 <= codeText.Length &&
+	                                string.Compare(codeText, scanPos, "effect:", 0, 7, StringComparison.OrdinalIgnoreCase) == 0)
 									break;
 
 								// 检查 .target 出现
-								if (scanPos + 7 <= lineText.Length && 
-									string.Compare(lineText, scanPos, ".target", 0, 7, StringComparison.Ordinal) == 0)
+								if (scanPos + 7 <= codeText.Length && 
+									string.Compare(codeText, scanPos, ".target", 0, 7, StringComparison.Ordinal) == 0)
 								{
 									targetFound = true;
 									break;
@@ -497,7 +675,7 @@ namespace For_the_Darkest_Dungeon.Classification
 
 						if (DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out List<string> validValues))
                         {
-                            var remainingText = lineText.Substring(match.Index + match.Length);
+                            var remainingText = codeText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
                             if (paramMatch.Success)
                             {

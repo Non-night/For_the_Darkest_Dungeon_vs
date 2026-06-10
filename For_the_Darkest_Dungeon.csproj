@@ -49,6 +49,7 @@
     <Compile Include="Classification\ArtClassifier.cs" />
     <Compile Include="Classification\ClassificationTypes.cs" />
     <Compile Include="Classification\EffectClassifier.cs" />
+    <Compile Include="Classification\InfoBaseClassifier.cs" />
     <Compile Include="Classification\InfoClassifier.cs" />
     <Compile Include="Classification\OverrideClassifier.cs" />
     <Compile Include="Completion\ArtCompletionSourceProvider.cs" />

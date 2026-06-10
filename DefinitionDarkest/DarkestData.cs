@@ -829,7 +829,128 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // 单字符串长度64
         public static readonly HashSet<(string Header, string Keyword)> SingleString64 = new HashSet<(string Header, string Keyword)>
         {
+            // 反击
+            ("riposte_skill:", ".id"), ("riposte_skill:", ".type"), ("riposte_skill:", ".anim"), ("riposte_skill:", ".fx"), ("riposte_skill:", ".targfx"),
+            ("riposte_skill:", ".targheadfx"), ("riposte_skill:", ".targchestfx"), ("riposte_skill:", ".misstargfx"), ("riposte_skill:", ".misstargheadfx"),
+            ("riposte_skill:", ".misstargchestfx"), ("riposte_skill:", ".custom_target_anim"),
+            
+            ("health_bar:", ".type"), ("commonfx:", ".deathfx"), ("commonfx:", ".id"),
 
+			("battle_backdrop:", ".background_name"), ("battle_backdrop:", ".animation"),
+            
+            ("wave_background:", ".background_name"), ("wave_background:", ".animation"),
+            // 怪物技能
+            ("skill:", ".id"), ("skill:", ".type"), ("skill:", ".anim"), ("skill:", ".fx"), ("skill:", ".targfx"), ("skill:", ".targheadfx"),
+            ("skill:", ".targchestfx"), ("skill:", ".misstargfx"), ("skill:", ".misstargheadfx"), ("skill:", ".misstargchestfx"), ("skill:", ".custom_target_anim"),
+            // loot
+			("loot:", ".code"), ("loot:", ".raid_finish_quirk_class_id"),
+
+            ("tag:", ".id"),
+
+            ("enemy_type:", ".id"),
+            
+            ("monster_brain:", ".id"),
+            // 容器
+            ("captor_empty:", ".performing_monster_captor_base_class"), ("captor_empty:", ".captor_full_monster_class"), ("captor_full:", ".captor_empty_monster_class"),
+            // 生命链接
+            ("life_link:", ".base_class"), ("life_link:", ".class"),
+
+            ("shared_health:", ".id"),
+            
+            ("death_class:", ".monster_class_id"),
+            
+            ("death_damage:", ".target_base_class_id"),
+            
+            ("battle_stage:", ".id"),
+            
+            ("companion:", ".monster_class"),
+            
+            ("torch_settings:", ".torch_settings_id"),
+            
+            ("tutorial:", ".id"),
+            
+            ("colour_grade:", ".name"),
+            // 刀甲
+            ("weapon:", ".name"), ("weapon:", ".icon"), ("armour:", ".name"), ("armour:", ".icon"),
+            // 英雄技能
+            ("combat_skill:", ".id"), ("combat_skill:", ".icon"), ("combat_skill:", ".type"), ("combat_skill:", ".anim"), ("combat_skill:", ".fx"),
+            ("combat_skill:", ".targfx"), ("combat_skill:", ".targheadfx"), ("combat_skill:", ".targchestfx"), ("combat_skill:", ".misstargfx"),
+            ("combat_skill:", ".misstargheadfx"), ("combat_skill:", ".misstargchestfx"), ("combat_skill:", ".custom_target_anim"),
+            // 移动技能
+            ("combat_move_skill:", ".id"), ("combat_move_skill:", ".icon"), ("combat_move_skill:", ".type"), ("combat_move_skill:", ".anim"),
+            ("combat_move_skill:", ".fx"), ("combat_move_skill:", ".targfx"), ("combat_move_skill:", ".targheadfx"), ("combat_move_skill:", ".targchestfx"),
+            ("combat_move_skill:", ".misstargfx"), ("combat_move_skill:", ".misstargheadfx"), ("combat_move_skill:", ".misstargchestfx"),
+            ("combat_move_skill:", ".custom_target_anim"),
+            // 马车刷新
+            ("generation:", ".reduce_number_of_cards_in_deck_hero_class_id"), ("generation:", ".town_event_dependency"),
+            
+            ("incompatible_party_member:", ".hero_tag"),
+            
+            ("extra_stack_limit:", ".id"),
+            
+            ("overstressed_modifier:", ".id"),
+            // act_out
+            ("act_out_display:", ".attack_friendly_anim"), ("act_out_display:", ".attack_friendly_fx"), ("act_out_display:", ".attack_friendly_targchestfx"),
+            ("act_out_display:", ".attack_friendly_sfx")
+        };
+        // 单字符串长度128
+        public static readonly HashSet<(string Header, string Keyword)> SingleString128 = new HashSet<(string Header, string Keyword)>
+        {
+            ("shape_shifter:", ".fx_name")
+        };
+        // 单字符串长度512
+        public static readonly HashSet<(string Header, string Keyword)> SingleString512 = new HashSet<(string Header, string Keyword)>
+        {
+            ("mode:", ".battle_complete_combat_skill_id"), ("mode:", ".affliction_combat_skill_id")
+        };
+
+        // 多参数长度限制
+        public static readonly Dictionary<(string Header, string Keyword), (int MaxArgs, int MaxLength)> MultiStringLengthRules = new Dictionary<(string Header, string Keyword), (int MaxArgs, int MaxLength)>
+        {
+            // 技能类
+            {("skill:", ".effect"), (8, 64) }, {("skill:", ".valid_modes"), (4, 64)}, {("skill:", ".damage_heal_base_class_ids"), (4, 64)},
+            {("riposte_skill:", ".effect"), (8, 64) }, {("riposte_skill:", ".valid_modes"), (4, 64)}, {("riposte_skill:", ".damage_heal_base_class_ids"), (4, 64)},
+            {("combat_skill:", ".effect"), (8, 64) }, {("combat_skill:", ".valid_modes"), (4, 64)}, {("combat_skill:", ".damage_heal_base_class_ids"), (4, 64)},
+            {("combat_move_skill:", ".effect"), (8, 64) }, {("combat_move_skill:", ".valid_modes"), (4, 64)}, {("combat_move_skill:", ".damage_heal_base_class_ids"), (4, 64)},
+            // 模式
+            {("mode:", ".always_guard_actor_base_class_ids"), (4, 64) },
+            // 生命反馈
+            {("hp_reaction:", ".effects"), (4, 64) },
+            // 死亡反馈
+            {("death_reaction:", ".effects"), (4, 64) },
+            // 暴击特效
+            {("crit:", ".effects"), (4, 64) },
+            // 容器
+            {("captor_empty:", ".capture_effects"), (4, 64) }, {("captor_full:", ".release_effects"), (4, 64)},
+            // battle_modifier
+            {("battle_modifier:", ".living_other_enemy_buffs"), (8, 64) }, {("battle_modifier:", ".living_hero_buff_instance_ids"), (8, 64)},
+            //死亡变身
+            {("death_class:", ".random_monster_class_ids"), (4, 64) }, {("death_class:", ".change_class_effects"), (4, 64) },
+            // controller
+            {("controller:", ".uncontrol_effects"), (4, 64) },
+            // companion
+            {("companion:", ".buffs"), (8, 64) },
+            // 受击反馈
+            {("skill_reaction:", ".was_hit_performer_effects"), (4, 64) }, {("skill_reaction:", ".was_hit_target_effects"), (4, 64) },
+            {("skill_reaction:", ".was_killed_other_monsters_effects"), (4, 64) }, {("skill_reaction:", ".was_killed_by_hero_effects"), (4, 64) },
+            {("skill_reaction:", ".was_killed_all_heroes_effects"), (4, 64) }, {("skill_reaction:", ".was_killed_effects"), (4, 64) },
+            // audio_modifier
+            {("audio_modifier:", ".ambience_parameter_ids"), (4, 64) },
+            // spawn
+            {("spawn:", ".effects"), (4, 31) }, {("spawn:", ".wave_effects"), (4, 64) },
+            // 死门
+            {("deaths_door:", ".buffs"), (8, 64) }, {("deaths_door:", ".recovery_buffs"), (8, 64) },
+            {("deaths_door:", ".recovery_heart_attack_buffs"), (8, 64) }, {("deaths_door:", ".enter_effects"), (8, 64) },
+            // last_hero
+            {("last_hero:", ".buffs"), (8, 64) },
+            // 爆压调节器
+            {("overstressed_modifier:", ".override_trait_type_ids"), (8, 64) },
+            // activity_modifier
+            {("activity_modifier:", ".override_valid_activity_ids"), (10, 64) },
+            // 怪癖调节器
+            {("quirk_modifier:", ".incompatible_class_ids"), (10, 64) },
+            // shape_shifter
+            {("shape_shifter:", ".monster_class_ids"), (4, 32) }
         };
 	}
 }
