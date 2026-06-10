@@ -1,0 +1,27 @@
+# Visual Studio 临时文件
+.vs/
+*.user
+*.suo
+*.cache
+*.log
+
+# 编译输出
+bin/
+obj/
+*.dll
+*.exe
+
+# NuGet 包
+packages/
+
+# Rider 或 JetBrains
+.idea/
+
+# OS 文件
+Thumbs.db
+.DS_Store
+
+# 自定义缓存或临时文件
+*.tmp
+*.bak
+*.vsixmanifest
