@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Management.Automation.Language;
 
 namespace For_the_Darkest_Dungeon.DefinitionDarkest
 {
@@ -193,6 +194,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         public static readonly List<string> StrBoolValues = new List<string>
         {
             "false", "true"
+        };
+        // 字符布尔参数-报错检验用
+        public static readonly List<string> StrBoolValuesForError = new List<string>
+        {
+            "false", "true", "False", "True", "FALSE", "TRUE"
         };
 
         // 映射：关键字 -> 对应的补全列表

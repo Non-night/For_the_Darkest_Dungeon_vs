@@ -796,8 +796,11 @@ namespace For_the_Darkest_Dungeon.Classification
 							}
 						}
 
+						// 参数合法性检测
 						if (DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out List<string> validValues))
                         {
+							if (DarkestEffectsData.KeywordToValuesMap[keyword] == DarkestEffectsData.StrBoolValues)
+								validValues = DarkestEffectsData.StrBoolValuesForError;
                             var remainingText = codeText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
                             if (paramMatch.Success)
