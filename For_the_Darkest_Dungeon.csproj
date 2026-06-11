@@ -56,6 +56,7 @@
     <Compile Include="Completion\EffectCompletionSourceProvider.cs" />
     <Compile Include="Completion\FuzzyCompletionCache.cs" />
     <Compile Include="Completion\FuzzyCompletionSet.cs" />
+    <Compile Include="Completion\InfoBaseCompletionSourceProvider.cs" />
     <Compile Include="Completion\InfoCompletionSourceProvider.cs" />
     <Compile Include="Completion\OverrideCompletionSourceProvider.cs" />
     <Compile Include="DefinitionDarkest\DarkestContentType.cs" />

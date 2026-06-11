@@ -354,6 +354,9 @@ namespace For_the_Darkest_Dungeon.Error
 							"单行内引号不成对");
 					}
 
+					foreach (var quoteError in CreateInvalidInlineQuoteErrors(snapshot, line, codeText))
+						yield return quoteError;
+
 					List<Span> stringSpans = GetStringSpans(codeText);
 
 					// 1. 判断当前行是否是 Header 行。
@@ -848,6 +851,18 @@ namespace For_the_Darkest_Dungeon.Error
 			}
 
 			// ------------------------------------------------------------
+			// 多参数参数数量检查。
+			// ------------------------------------------------------------
+			foreach (var argCount in ValidateMaxArgumentCount(
+				snapshot,
+				currentHeader,
+				keyword,
+				args))
+			{
+				yield return argCount;
+			}
+
+			// ------------------------------------------------------------
 			// 固定参数表检查。
 			//
 			// 如果没有固定参数表，到这里就可以结束。
@@ -866,7 +881,24 @@ namespace For_the_Darkest_Dungeon.Error
 				yield break;
 			}
 
+			if (keyword == ".disabled_act_out_combat_start_turn_types")
+			{
+				foreach (var tag in ValidateDisabledAct_outCombatStartTurnTypes(snapshot, keyword, validValues, args))
+					yield return tag;
+
+				yield break;
+			}
+
 			bool isBooleanKeyword = IsBooleanValueList(validValues);
+
+			if (isBooleanKeyword && args.Count > 1)
+			{
+				yield return CreateError(
+					snapshot,
+					args[1].StartPosition,
+					args[1].Length,
+					"如无必要，请勿在使用布尔型参数的关键字后写多个参数");
+			}
 
 			foreach (ParsedArgument arg in args)
 			{
@@ -946,6 +978,64 @@ namespace For_the_Darkest_Dungeon.Error
 					firstExtraArg.StartPosition,
 					firstExtraArg.Length,
 					$"{keyword} 参数数量不能超过 {validValues.Count} 个，当前数量为 {args.Count}");
+			}
+
+			foreach (ParsedArgument arg in args)
+			{
+				string value = arg.Value;
+
+				if (value.Any(char.IsWhiteSpace))
+				{
+					yield return CreateError(
+						snapshot,
+						arg.StartPosition,
+						arg.Length,
+						$"{keyword} 参数 '{value}' 不能包含空格或制表符");
+					continue;
+				}
+
+				if (!validSet.Contains(value))
+				{
+					yield return CreateError(
+						snapshot,
+						arg.StartPosition,
+						arg.Length,
+						$"{keyword} 不存在参数 '{value}'");
+					continue;
+				}
+
+				if (!usedSet.Add(value))
+				{
+					yield return CreateError(
+						snapshot,
+						arg.StartPosition,
+						arg.Length,
+						$"{keyword} 出现重复参数 '{value}'");
+				}
+			}
+		}
+
+		/// <summary>
+		/// .disabled_act_out_combat_start_turn_types 特判
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> ValidateDisabledAct_outCombatStartTurnTypes(
+			ITextSnapshot snapshot,
+			string keyword,
+			List<string> validValues,
+			List<ParsedArgument> args)
+		{
+			var validSet = new HashSet<string>(validValues, StringComparer.Ordinal);
+			var usedSet = new HashSet<string>(StringComparer.Ordinal);
+
+			if (args.Count > 4)
+			{
+				ParsedArgument firstExtraArg = args[4];
+
+				yield return CreateError(
+					snapshot,
+					firstExtraArg.StartPosition,
+					firstExtraArg.Length,
+					$"{keyword} 参数数量不能超过 4 个，当前数量为 {args.Count}");
 			}
 
 			foreach (ParsedArgument arg in args)
@@ -1417,6 +1507,27 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
+		/// 检查当前 Header + Keyword 是否属于多参数参数数量限制表。
+		/// </summary>
+		private bool TryGetMaxArgumentCountRule(
+			string currentHeader,
+			string keyword,
+			out int maxArgs)
+		{
+			if (DarkestInfoData.MaxArgumentCountRules.TryGetValue(
+				(currentHeader, keyword),
+				out var rule))
+			{
+				maxArgs = rule;
+				return true;
+			}
+
+			maxArgs = 0;
+
+			return false;
+		}
+
+		/// <summary>
 		/// 针对单字符串参数做长度检查。
 		/// </summary>
 		private IEnumerable<ITagSpan<IErrorTag>> ValidateSingleStringLength(
@@ -1430,6 +1541,16 @@ namespace For_the_Darkest_Dungeon.Error
 
 			if (args.Count == 0)
 				yield break;
+
+			if (args.Count > 1)
+			{
+				ParsedArgument argExceed = args[1];
+				yield return CreateError(
+					snapshot,
+					argExceed.StartPosition,
+					argExceed.Length,
+					$"{currentHeader} 的 {keyword} 理论上只允许一个参数，如无必要请勿写多个参数");
+			}
 
 			ParsedArgument arg = args[0];
 
@@ -1527,6 +1648,105 @@ namespace For_the_Darkest_Dungeon.Error
 						arg.StartPosition,
 						arg.Length,
 						$"{currentHeader} 的 {keyword} 参数 '{arg.Value}' 长度不能超过 {maxLength} 个字符，当前长度为 {actualLength}");
+				}
+			}
+		}
+
+		/// <summary>
+		/// 针对多参数做数量检查。
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> ValidateMaxArgumentCount(
+			ITextSnapshot snapshot,
+			string currentHeader,
+			string keyword,
+			List<ParsedArgument> args)
+		{
+			if (!TryGetMaxArgumentCountRule(currentHeader, keyword, out int maxArgs))
+				yield break;
+
+			if (args.Count == 0)
+				yield break;
+
+			// 参数数量检查：超过允许数量时报错。
+			if (args.Count > maxArgs)
+			{
+				ParsedArgument firstExtraArg = args[maxArgs];
+
+				yield return CreateError(
+					snapshot,
+					firstExtraArg.StartPosition,
+					firstExtraArg.Length,
+					$"{currentHeader} 的 {keyword} 参数数量不能超过 {maxArgs} 个，当前数量为 {args.Count}");
+			}
+		}
+
+		/// <summary>
+		/// 检查引号是否贴着普通字符。
+		/// 规则：
+		/// 1. 开始引号前面不能紧贴非空白字符；
+		/// 2. 结束引号后面不能紧贴普通字符；
+		/// 3. 结束引号后面如果是空白、行尾、注释则允许。
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> CreateInvalidInlineQuoteErrors(
+			ITextSnapshot snapshot,
+			ITextSnapshotLine line,
+			string codeText)
+		{
+			bool inString = false;
+
+			for (int i = 0; i < codeText.Length; i++)
+			{
+				if (codeText[i] != '"')
+					continue;
+
+				if (!inString)
+				{
+					// 当前是开始引号。
+					// 开始引号必须位于参数起点，也就是：
+					// 行首，或者前一个字符是空白。
+					bool hasBadPreviousChar =
+						i > 0 &&
+						!char.IsWhiteSpace(codeText[i - 1]);
+
+					if (hasBadPreviousChar)
+					{
+						yield return CreateError(
+							snapshot,
+							line.Start.Position + i,
+							1,
+							"引号前极度不建议紧贴普通字符，请用空格分隔，或把整个参数放进引号");
+					}
+
+					inString = true;
+				}
+				else
+				{
+					// 当前是结束引号。
+					// 结束引号后面允许：
+					// 1. 行尾；
+					// 2. 空白；
+					// 3. 下一个 .keyword。
+					bool hasBadNextChar =
+						i + 1 < codeText.Length &&
+						!char.IsWhiteSpace(codeText[i + 1]);
+
+					if (hasBadNextChar)
+					{
+						if (codeText[i + 1] == '.')
+							yield return CreateWarning(
+								snapshot,
+								line.Start.Position + i,
+								1,
+								"引号后极度不建议紧贴下一个关键字，请用空格分隔");
+						else
+							yield return CreateError(
+								snapshot,
+								line.Start.Position + i,
+								1,
+								"引号后极度不建议紧贴普通字符，请用空格分隔，或把整个参数放进引号");
+					}
+
+					inString = false;
 				}
 			}
 		}

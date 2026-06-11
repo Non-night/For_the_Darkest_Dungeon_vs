@@ -101,7 +101,7 @@ internal class InfoCommandFilter : IOleCommandTarget
 			string lastWord = trimmedText.Split(' ', '\t', '\n').LastOrDefault();
 
 			bool isDisabledPopupTextTypesContext =
-				IsAfterDisabledPopupTextTypesKeyword(lineText);
+				IsAfterContinuousValueCompletionKeyword(lineText);
 
 			if ((shouldTrigger && DarkestInfoData.IsKeywordHasStaticValues(lastWord))
 				|| isDisabledPopupTextTypesContext)
@@ -124,9 +124,9 @@ internal class InfoCommandFilter : IOleCommandTarget
 					TriggerCompletion();
 				}
 			}
-			else if (IsAfterDisabledPopupTextTypesKeyword(lineText))
+			else if (IsAfterContinuousValueCompletionKeyword(lineText))
 			{
-				// .disabled_popup_text_types 的连续参数补全仍然保留
+				// 连续参数补全仍然保留
 				TriggerCompletion();
 			}
 			else if (_currentSession != null && !_currentSession.IsDismissed)
@@ -195,21 +195,31 @@ internal class InfoCommandFilter : IOleCommandTarget
 		completionSet.Recalculate();
 	}
 
-	private bool IsAfterDisabledPopupTextTypesKeyword(string lineText)
+	private bool IsAfterContinuousValueCompletionKeyword(string lineText)
 	{
-		const string keyword = ".disabled_popup_text_types";
+		string[] keywords =
+		{
+		".disabled_popup_text_types",
+		".disabled_act_out_combat_start_turn_types"
+	};
 
-		int keywordIndex = lineText.LastIndexOf(keyword, StringComparison.Ordinal);
-		if (keywordIndex < 0)
-			return false;
+		foreach (string keyword in keywords)
+		{
+			int keywordIndex = lineText.LastIndexOf(keyword, StringComparison.Ordinal);
+			if (keywordIndex < 0)
+				continue;
 
-		int afterKeywordIndex = keywordIndex + keyword.Length;
+			int afterKeywordIndex = keywordIndex + keyword.Length;
 
-		// 必须已经进入参数区域，避免影响正在输入 .disabled_popup_text_types 本身。
-		if (afterKeywordIndex >= lineText.Length)
-			return false;
+			// 必须已经进入参数区域，避免影响正在输入关键字本身。
+			if (afterKeywordIndex >= lineText.Length)
+				continue;
 
-		return char.IsWhiteSpace(lineText[afterKeywordIndex]);
+			if (char.IsWhiteSpace(lineText[afterKeywordIndex]))
+				return true;
+		}
+
+		return false;
 	}
 
 	private bool IsDotAtValidKeywordStart(ITextSnapshot snapshot, int dotPosition)
