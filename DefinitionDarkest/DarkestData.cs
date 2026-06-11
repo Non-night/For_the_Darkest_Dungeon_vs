@@ -194,6 +194,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         {
             "false", "true"
         };
+        // 字符布尔参数-报错检验用
+        public static readonly List<string> StrBoolValuesForError = new List<string>
+        {
+            "false", "true", "False", "True", "FALSE", "TRUE"
+        };
 
         // 映射：关键字 -> 对应的补全列表
         public static readonly Dictionary<string, List<string>> KeywordToValuesMap = new Dictionary<string, List<string>>
@@ -273,7 +278,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".apply_with_result", StrBoolValues },
             { ".skill_instant", StrBoolValues },
             { ".set_monster_class_reset_buffs", StrBoolValues },
-            { ".set_monster_class_clear_initiative", StrBoolValues },
+            { ".set_monster_class_clear_initative", StrBoolValues },
             { ".set_monster_class_clear_monster_brain_cooldowns", StrBoolValues },
             { ".set_monster_class_reset_scale", StrBoolValues },
             { ".has_description", StrBoolValues },
@@ -732,10 +737,13 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { "BOOL", new List<string> { "true", "false" } },
 
             // disabled_act_out_combat_start_turn_types
-            { ".disabled_act_out_combat_start_turn_types", new List<string> {
-                "nothing", "bark_stress", "change_pos", "ignore_command", "random_command",
-                "retreat_from_combat", "attack_friendly", "attack_self", "mark_self", "stress_heal_self",
-                "stress_heal_party", "buff_random_party_member", "buff_party", "heal_self", "consume_item"} },
+            { ".disabled_act_out_combat_start_turn_types", new List<string>
+                {
+                    "nothing", "bark_stress", "change_pos", "ignore_command", "random_command",
+                    "retreat_from_combat", "attack_friendly", "attack_self", "mark_self", "stress_heal_self",
+                    "stress_heal_party", "buff_random_party_member", "buff_party", "heal_self", "consume_item"
+                }
+            },
 
             // 技能type
             { "SKILL_TYPE", new List<string> { "melee", "ranged", "move", "teleport" } },
@@ -951,6 +959,32 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             {("quirk_modifier:", ".incompatible_class_ids"), (10, 64) },
             // shape_shifter
             {("shape_shifter:", ".monster_class_ids"), (4, 32) }
+        };
+
+        // 参数个数限制
+        public static readonly Dictionary<(string Header, string Keyword), int> MaxArgumentCountRules = new Dictionary<(string Header, string Keyword), int>()
+        {
+            // 技能类
+            {("skill:", ".heal"), 2}, {("skill:", ".move"), 2}, {("skill:", ".rank_damage_modifiers"), 4}, {("skill:", ".area_pos_offset"), 2},
+            {("skill:", ".target_area_pos_offset"), 2}, {("skill:", ".required_performer_hp_range"), 2}, 
+            {("riposte_skill:", ".heal"), 2}, {("riposte_skill:", ".move"), 2}, {("riposte_skill:", ".rank_damage_modifiers"), 4}, {("riposte_skill:", ".area_pos_offset"), 2},
+            {("riposte_skill:", ".target_area_pos_offset"), 2}, {("riposte_skill:", ".required_performer_hp_range"), 2}, 
+            {("combat_skill:", ".heal"), 2}, {("combat_skill:", ".move"), 2}, {("combat_skill:", ".rank_damage_modifiers"), 4}, {("combat_skill:", ".area_pos_offset"), 2},
+            {("combat_skill:", ".target_area_pos_offset"), 2}, {("combat_skill:", ".required_performer_hp_range"), 2}, 
+            {("combat_move_skill:", ".heal"), 2}, {("combat_move_skill:", ".move"), 2}, {("combat_move_skill:", ".rank_damage_modifiers"), 4}, {("combat_move_skill:", ".area_pos_offset"), 2},
+            {("combat_move_skill:", ".target_area_pos_offset"), 2}, {("combat_move_skill:", ".required_performer_hp_range"), 2},
+            // defending_area_pos_offset
+            {("defending_area_pos_offset:", ".offset"), 2},
+            // shape_shifter
+            {("shape_shifter:", ".monster_class_chances"), 4},
+            // 随机死亡变身
+            {("death_class:", ".random_monster_class_chances"), 4},
+            // audio_modifier
+            {("audio_modifier:", ".ambience_parameter_values"), 4},
+            // 武器
+            {("weapon:", ".dmg"), 2},
+            // 爆压调节器
+            {("overstressed_modifier:", ".override_trait_type_chances"), 8}
         };
 	}
 }

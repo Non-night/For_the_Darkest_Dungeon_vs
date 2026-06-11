@@ -1,6 +1,7 @@
 ﻿using For_the_Darkest_Dungeon.DefinitionDarkest;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Adornments;
+using Microsoft.VisualStudio.Text.Differencing;
 using Microsoft.VisualStudio.Text.Tagging;
 using Microsoft.VisualStudio.Utilities;
 using System;
@@ -8,6 +9,9 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Text.RegularExpressions;
+
+using RegexMatch = System.Text.RegularExpressions.Match;
+using Regex = System.Text.RegularExpressions.Regex;
 
 namespace For_the_Darkest_Dungeon.Classification
 {
@@ -113,7 +117,7 @@ namespace For_the_Darkest_Dungeon.Classification
 
         private int GetFirstLogicalColon(string lineText)
         {
-            var stringMatches = _stringRegex.Matches(lineText).Cast<Match>();
+            var stringMatches = _stringRegex.Matches(lineText).Cast<RegexMatch>();
             var stringSpans = stringMatches.Select(m => new Span(m.Index, m.Length)).ToList();
 
             for (int c = 0; c < lineText.Length; c++)
@@ -170,7 +174,7 @@ namespace For_the_Darkest_Dungeon.Classification
 			// 无引号情况
 			int end = lineText.Length;
 
-			foreach (Match nextMatch in _keywordRegex.Matches(lineText))
+			foreach (RegexMatch nextMatch in _keywordRegex.Matches(lineText))
 			{
 				if (nextMatch.Index <= pos) continue;
 				if (stringSpans.Any(s => s.Contains(nextMatch.Index))) continue;
@@ -385,7 +389,7 @@ namespace For_the_Darkest_Dungeon.Classification
 			string targetKeyword,
 			List<Span> stringSpans)
 		{
-			foreach (Match laterMatch in _keywordRegex.Matches(codeText))
+			foreach (RegexMatch laterMatch in _keywordRegex.Matches(codeText))
 			{
 				// 只看当前关键字之后的内容。
 				if (laterMatch.Index <= currentKeywordIndex)
@@ -410,6 +414,75 @@ namespace For_the_Darkest_Dungeon.Classification
 
 			return false;
 		}
+
+		/// <summary>
+		/// 检查引号是否贴着普通字符。
+		/// 规则：
+		/// 1. 开始引号前面不能紧贴非空白字符；
+		/// 2. 结束引号后面不能紧贴普通字符；
+		/// 3. 结束引号后面如果是空白、行尾、注释则允许。
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> CreateInvalidInlineQuoteErrors(
+			ITextSnapshot snapshot,
+			ITextSnapshotLine line,
+			string codeText)
+		{
+			bool inString = false;
+
+			for (int i = 0; i < codeText.Length; i++)
+			{
+				if (codeText[i] != '"')
+					continue;
+
+				if (!inString)
+				{
+					// 当前是开始引号。
+					// 开始引号必须位于参数起点，也就是：
+					// 行首，或者前一个字符是空白。
+					bool hasBadPreviousChar =
+						i > 0 &&
+						!char.IsWhiteSpace(codeText[i - 1]);
+
+					if (hasBadPreviousChar)
+					{
+						yield return new TagSpan<IErrorTag>(
+							new SnapshotSpan(snapshot, line.Start.Position + i, 1),
+							new ErrorTag(PredefinedErrorTypeNames.SyntaxError,
+							"引号前极度不建议紧贴普通字符，请用空格分隔，或把整个参数放进引号"));
+					}
+
+					inString = true;
+				}
+				else
+				{
+					// 当前是结束引号。
+					// 结束引号后面允许：
+					// 1. 行尾；
+					// 2. 空白；
+					// 3. 下一个 .keyword。
+					bool hasBadNextChar =
+						i + 1 < codeText.Length &&
+						!char.IsWhiteSpace(codeText[i + 1]);
+
+					if (hasBadNextChar)
+					{
+						if (codeText[i + 1] == '.')
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start.Position + i, 1),
+								new ErrorTag(PredefinedErrorTypeNames.Warning,
+								"引号后极度不建议紧贴下一个关键字，请用空格分隔"));
+						else
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start.Position + i, 1),
+								new ErrorTag(PredefinedErrorTypeNames.SyntaxError,
+								"引号后极度不建议紧贴普通字符，请用空格分隔，或把整个参数放进引号"));
+					}
+
+					inString = false;
+				}
+			}
+		}
+
 
 		public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
         {
@@ -468,6 +541,9 @@ namespace For_the_Darkest_Dungeon.Classification
 								"单行内引号不成对"));
 					}
 
+					foreach (var quoteError in CreateInvalidInlineQuoteErrors(snapshot, line, codeText))
+						yield return quoteError;
+
 					int firstColonIndex = GetFirstLogicalColon(codeText);
 
 					// 2. 结构校验
@@ -509,12 +585,12 @@ namespace For_the_Darkest_Dungeon.Classification
                     }
 
                     // 3. 关键字和参数校验
-                    var stringMatches = _stringRegex.Matches(codeText).Cast<Match>().ToList();
+                    var stringMatches = _stringRegex.Matches(codeText).Cast<RegexMatch>().ToList();
                     var stringSpans = stringMatches.Select(m => new Span(m.Index, m.Length)).ToList();
 
-					var seenDotKeywords = new Dictionary<string, Match>(StringComparer.Ordinal);
+					var seenDotKeywords = new Dictionary<string, RegexMatch>(StringComparer.Ordinal);
 
-					foreach (Match match in _keywordRegex.Matches(codeText))
+					foreach (RegexMatch match in _keywordRegex.Matches(codeText))
                     {
                         if (stringSpans.Any(s => s.Contains(match.Index))) continue;
                         if (match.Index > 0 && char.IsDigit(codeText[match.Index - 1])) continue;
@@ -621,7 +697,7 @@ namespace For_the_Darkest_Dungeon.Classification
 						// ------------------------------------------------------------
 						if (DotKeywordsToCheck.Contains(keyword))
 						{
-							Match firstDifferentDotMatch = seenDotKeywords
+							RegexMatch firstDifferentDotMatch = seenDotKeywords
 								.Where(pair => !string.Equals(pair.Key, keyword, StringComparison.Ordinal))
 								.Select(pair => pair.Value)
 								.FirstOrDefault();
@@ -796,8 +872,11 @@ namespace For_the_Darkest_Dungeon.Classification
 							}
 						}
 
+						// 参数合法性检测
 						if (DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out List<string> validValues))
                         {
+							if (DarkestEffectsData.KeywordToValuesMap[keyword] == DarkestEffectsData.StrBoolValues)
+								validValues = DarkestEffectsData.StrBoolValuesForError;
                             var remainingText = codeText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
                             if (paramMatch.Success)

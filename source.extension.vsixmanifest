@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" ?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
     <Metadata>
-        <Identity Id="For_the_Darkest_Dungeon.47e77e32-9afb-49d3-aaa2-628132f2de5b" Version="3.0.2" Language="zh-Hans" Publisher="No_night" />
+        <Identity Id="For_the_Darkest_Dungeon.47e77e32-9afb-49d3-aaa2-628132f2de5b" Version="3.0.3" Language="zh-Hans" Publisher="No_night" />
         <DisplayName>For The Darkest Dungeon</DisplayName>
         <Description xml:space="preserve">实现了effects.darkest和info.darkest/art.darkest/override.darkest的高亮和自动补全，并且现有一定的语法检查功能
 高亮颜色大多数随主题自动变化，全部可以自行定义，在工具→选项→环境→字体与颜色，Darkest开头的部分就是
