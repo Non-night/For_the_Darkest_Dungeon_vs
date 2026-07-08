@@ -27,3 +27,6 @@ Thumbs.db
 
 *.secrets
 secrets.json
+
+TodoList.md
+AGENT.md

@@ -8,6 +8,12 @@ using System.Text.RegularExpressions;
 
 namespace For_the_Darkest_Dungeon.Completion
 {
+	/// <summary>
+	/// Info / Art / Override 三类文件共用的补全源提供器基类。
+	///
+	/// 这三类文件在补全规则上必须保持完全一致，
+	/// 因此所有关键字补全、Header 补全、静态值补全、连续参数补全都统一集中在这里。
+	/// </summary>
 	internal abstract class InfoBaseCompletionSourceProvider : ICompletionSourceProvider
 	{
 		/// <summary>
@@ -27,6 +33,16 @@ namespace For_the_Darkest_Dungeon.Completion
 
 		private sealed class InfoBaseCompletionSource : ICompletionSource
 		{
+			/// <summary>
+			/// 所有需要支持连续参数补全的关键字。
+			/// 按你的要求，Info / Art / Override 三者完全统一，并以 Info 为基准。
+			/// </summary>
+			private static readonly string[] ContinuousValueKeywords =
+			{
+				".disabled_popup_text_types",
+				".disabled_act_out_combat_start_turn_types"
+			};
+
 			private readonly ITextBuffer _buffer;
 			private readonly string _kindName;
 			private bool _isDisposed = false;
@@ -57,18 +73,25 @@ namespace For_the_Darkest_Dungeon.Completion
 				int curPos = triggerPoint.Value.Position;
 				ITextSnapshotLine line = triggerPoint.Value.GetContainingLine();
 
-				// 1. 获取光标前文本环境
+				// 1. 获取光标前文本环境。
 				string lineTextUntilCaret = snapshot.GetText(line.Start, curPos - line.Start);
 				string trimmedText = lineTextUntilCaret.TrimEnd();
 
 				List<string> resultList = null;
 				int startPos = curPos;
 
-				// 2. 获取当前活动 Header
+				// 2. 获取当前活动 Header。
 				string activeHeader = GetActiveHeader(snapshot, line.LineNumber);
 
-				// 3-A. 参数值补全
-				if (!string.IsNullOrEmpty(activeHeader) &&
+				// 3-A. 参数值补全。
+				// 这里先判断“当前 token 是否明显是关键字输入”。
+				// 如果当前 token 以 . 开头，则优先走关键字补全，
+				// 不允许连续参数补全把 . 开头的输入抢走。
+				bool currentTokenStartsWithDot = TryGetCurrentToken(lineTextUntilCaret, out string currentToken)
+					&& currentToken.StartsWith(".", StringComparison.Ordinal);
+
+				if (!currentTokenStartsWithDot &&
+					!string.IsNullOrEmpty(activeHeader) &&
 					DarkestInfoData.InfoContextMap.TryGetValue(activeHeader, out List<string> keywords))
 				{
 					// 特判：连续参数补全，并排除已经出现过的参数。
@@ -77,24 +100,14 @@ namespace For_the_Darkest_Dungeon.Completion
 							line.Start.Position,
 							curPos,
 							keywords,
-							".disabled_popup_text_types",
-							out resultList,
-							out startPos)
-						||
-						TryGetContinuousKeywordValueCompletion(
-							lineTextUntilCaret,
-							line.Start.Position,
-							curPos,
-							keywords,
-							".disabled_act_out_combat_start_turn_types",
 							out resultList,
 							out startPos))
 					{
-						// resultList 和 startPos 已经设置好
+						// resultList 和 startPos 已经设置好。
 					}
 					else
 					{
-						string foundKeyword = keywords.FirstOrDefault(kw => trimmedText.EndsWith(kw));
+						string foundKeyword = keywords.FirstOrDefault(keyword => trimmedText.EndsWith(keyword));
 						if (foundKeyword != null)
 						{
 							resultList = DarkestInfoData.GetValuesForKeyword(activeHeader, foundKeyword);
@@ -102,33 +115,26 @@ namespace For_the_Darkest_Dungeon.Completion
 						}
 						else
 						{
-							string lastWord = trimmedText
-								.Split(' ', '\t', '\n')
-								.LastOrDefault();
-
-							DarkestInfoData.KeywordValueMap.TryGetValue(
-								".disabled_popup_text_types",
-								out List<string> popupTextTypes);
-
-							int disabledPopupStart = trimmedText.IndexOf(
-								".disabled_popup_text_types",
-								StringComparison.Ordinal);
-
-							if (popupTextTypes != null &&
-								popupTextTypes.Any(word => lastWord.EndsWith(word)) &&
-								disabledPopupStart > -1)
+							// 如果当前已经处在连续参数序列中，而且最后一个词是前面刚输入的参数值，
+							// 仍然继续给出该连续关键字的候选值列表。
+							foreach (string continuousKeyword in ContinuousValueKeywords)
 							{
-								resultList = DarkestInfoData.GetValuesForKeyword(
-									activeHeader,
-									".disabled_popup_text_types");
-
-								startPos = curPos;
+								if (TryGetFollowupContinuousValueCompletion(
+										trimmedText,
+										activeHeader,
+										continuousKeyword,
+										out resultList,
+										out startPos,
+										curPos))
+								{
+									break;
+								}
 							}
 						}
 					}
 				}
 
-				// 3-B. 关键字或 Header 补全
+				// 3-B. 关键字或 Header 补全。
 				if (resultList == null || resultList.Count == 0)
 				{
 					int wordStart = curPos;
@@ -157,7 +163,7 @@ namespace For_the_Darkest_Dungeon.Completion
 					bool currentLineHasColon =
 						line.GetText().IndexOf(':') >= 0;
 
-					// Header 补全
+					// Header 补全。
 					if (!currentLineHasColon &&
 						!currentWord.StartsWith(".") &&
 						beforeWordOnlyWhitespace)
@@ -168,38 +174,24 @@ namespace For_the_Darkest_Dungeon.Completion
 
 						startPos = wordStart;
 					}
-					// 关键字补全
-					else if (!string.IsNullOrEmpty(activeHeader) &&
-							 currentWord.StartsWith("."))
+					// 关键字补全。
+					else if (currentWord.StartsWith("."))
 					{
-						bool validDotStart = wordStart == line.Start.Position;
-
-						if (!validDotStart && wordStart > line.Start.Position)
-						{
-							char prevChar = snapshot[wordStart - 1];
-							validDotStart = char.IsWhiteSpace(prevChar) || prevChar == ':';
-						}
-
-						// 不允许 .hp. 这种 token 内第二个点继续触发关键字补全
-						bool hasSecondDot = currentWord.IndexOf('.', 1) >= 0;
-
-						if (validDotStart && !hasSecondDot)
-						{
-							if (DarkestInfoData.InfoContextMap.TryGetValue(
+						if (!string.IsNullOrEmpty(activeHeader) &&
+							DarkestInfoData.InfoContextMap.TryGetValue(
 								activeHeader,
 								out List<string> kws))
-							{
-								resultList = FuzzyCompletionCache.GetMatches(
-									kws,
-									currentWord);
+						{
+							resultList = FuzzyCompletionCache.GetMatches(
+								kws,
+								currentWord);
 
-								startPos = wordStart;
-							}
+							startPos = wordStart;
 						}
 					}
 				}
 
-				// 4. 生成补全集合
+				// 4. 生成补全集合。
 				if (resultList != null && resultList.Count > 0)
 				{
 					string completionSetName = "Darkest" + _kindName;
@@ -207,9 +199,9 @@ namespace For_the_Darkest_Dungeon.Completion
 
 					List<Microsoft.VisualStudio.Language.Intellisense.Completion> completions =
 						resultList
-							.Select(k => new Microsoft.VisualStudio.Language.Intellisense.Completion(
-								k,
-								k,
+							.Select(item => new Microsoft.VisualStudio.Language.Intellisense.Completion(
+								item,
+								item,
 								contextText,
 								null,
 								null))
@@ -239,7 +231,7 @@ namespace For_the_Darkest_Dungeon.Completion
 					ITextSnapshotLine line = snapshot.GetLineFromLineNumber(i);
 					string text = line.GetText();
 
-					// 跳过注释和空行
+					// 跳过注释和空行。
 					if (string.IsNullOrWhiteSpace(text) || text.TrimStart().StartsWith("//"))
 						continue;
 
@@ -254,6 +246,31 @@ namespace For_the_Darkest_Dungeon.Completion
 			}
 
 			/// <summary>
+			/// 尝试获取当前 token。
+			/// token 以空白或冒号为边界。
+			/// </summary>
+			private bool TryGetCurrentToken(string lineTextUntilCaret, out string currentToken)
+			{
+				currentToken = string.Empty;
+
+				if (string.IsNullOrEmpty(lineTextUntilCaret))
+					return false;
+
+				int tokenStart = lineTextUntilCaret.Length;
+				while (tokenStart > 0)
+				{
+					char prevChar = lineTextUntilCaret[tokenStart - 1];
+					if (char.IsWhiteSpace(prevChar) || prevChar == ':')
+						break;
+
+					tokenStart--;
+				}
+
+				currentToken = lineTextUntilCaret.Substring(tokenStart);
+				return !string.IsNullOrEmpty(currentToken);
+			}
+
+			/// <summary>
 			/// 连续参数补全特判。
 			///
 			/// 用于这类关键字：
@@ -263,13 +280,42 @@ namespace For_the_Darkest_Dungeon.Completion
 			/// 1. 支持连续参数补全；
 			/// 2. 支持当前正在输入的参数过滤；
 			/// 3. 排除前文已经出现过的参数；
-			/// 4. 只在当前 Header 允许该关键字时生效。
-			///
-			/// 当前用于：
-			/// - .disabled_popup_text_types
-			/// - .disabled_act_out_combat_start_turn_types
+			/// 4. 只在当前 Header 允许该关键字时生效；
+			/// 5. 若当前 token 以 . 开头，则不抢关键字补全。
 			/// </summary>
 			private bool TryGetContinuousKeywordValueCompletion(
+				string lineTextUntilCaret,
+				int lineStartPosition,
+				int curPos,
+				List<string> keywords,
+				out List<string> resultList,
+				out int startPos)
+			{
+				resultList = null;
+				startPos = curPos;
+
+				foreach (string keyword in ContinuousValueKeywords)
+				{
+					if (TryGetContinuousKeywordValueCompletionForOneKeyword(
+							lineTextUntilCaret,
+							lineStartPosition,
+							curPos,
+							keywords,
+							keyword,
+							out resultList,
+							out startPos))
+					{
+						return true;
+					}
+				}
+
+				return false;
+			}
+
+			/// <summary>
+			/// 针对单个连续参数关键字执行补全计算。
+			/// </summary>
+			private bool TryGetContinuousKeywordValueCompletionForOneKeyword(
 				string lineTextUntilCaret,
 				int lineStartPosition,
 				int curPos,
@@ -328,6 +374,11 @@ namespace For_the_Darkest_Dungeon.Completion
 					tokenStartIndex,
 					lineTextUntilCaret.Length - tokenStartIndex);
 
+				// 若当前输入已经以 . 开头，则说明用户正在开始下一个关键字输入。
+				// 按你的要求，此时必须优先触发关键字补全，而不是参数补全。
+				if (currentInput.StartsWith(".", StringComparison.Ordinal))
+					return false;
+
 				// 已经完成输入的参数区域，不包含当前正在输入的 token。
 				string completedArgumentText = lineTextUntilCaret.Substring(
 					afterKeywordIndex,
@@ -340,7 +391,7 @@ namespace For_the_Darkest_Dungeon.Completion
 
 				// 排除已经出现过的参数。
 				List<string> availableValues = allValues
-					.Where(v => !usedValues.Contains(v))
+					.Where(value => !usedValues.Contains(value))
 					.ToList();
 
 				if (availableValues.Count == 0)
@@ -352,6 +403,46 @@ namespace For_the_Darkest_Dungeon.Completion
 
 				startPos = lineStartPosition + tokenStartIndex;
 
+				return resultList != null && resultList.Count > 0;
+			}
+
+			/// <summary>
+			/// 当用户已经输入了一个连续参数值，并准备继续输入下一个值时，
+			/// 仍然继续给出该连续关键字允许的候选值。
+			/// </summary>
+			private bool TryGetFollowupContinuousValueCompletion(
+				string trimmedText,
+				string activeHeader,
+				string keyword,
+				out List<string> resultList,
+				out int startPos,
+				int curPos)
+			{
+				resultList = null;
+				startPos = curPos;
+
+				if (string.IsNullOrEmpty(activeHeader))
+					return false;
+
+				string lastWord = trimmedText
+					.Split(' ', '\t', '\n')
+					.LastOrDefault();
+
+				if (string.IsNullOrEmpty(lastWord) || lastWord.StartsWith(".", StringComparison.Ordinal))
+					return false;
+
+				if (!DarkestInfoData.KeywordValueMap.TryGetValue(keyword, out List<string> values))
+					return false;
+
+				int keywordStart = trimmedText.IndexOf(keyword, StringComparison.Ordinal);
+				if (keywordStart < 0)
+					return false;
+
+				if (!values.Any(value => lastWord.EndsWith(value)))
+					return false;
+
+				resultList = DarkestInfoData.GetValuesForKeyword(activeHeader, keyword);
+				startPos = curPos;
 				return resultList != null && resultList.Count > 0;
 			}
 

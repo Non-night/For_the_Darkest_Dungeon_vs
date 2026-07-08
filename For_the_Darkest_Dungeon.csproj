@@ -45,7 +45,7 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="ArtCommandFilter.cs" />
+    <Compile Include="Completion\ArtCommandFilter.cs" />
     <Compile Include="Classification\ArtClassifier.cs" />
     <Compile Include="Classification\ClassificationTypes.cs" />
     <Compile Include="Classification\EffectClassifier.cs" />
@@ -53,6 +53,8 @@
     <Compile Include="Classification\InfoClassifier.cs" />
     <Compile Include="Classification\OverrideClassifier.cs" />
     <Compile Include="Completion\ArtCompletionSourceProvider.cs" />
+    <Compile Include="Completion\BaseDarkestCommandFilter.cs" />
+    <Compile Include="Completion\BaseSharedInfoLikeCommandFilter.cs" />
     <Compile Include="Completion\EffectCompletionSourceProvider.cs" />
     <Compile Include="Completion\FuzzyCompletionCache.cs" />
     <Compile Include="Completion\FuzzyCompletionSet.cs" />
@@ -61,23 +63,26 @@
     <Compile Include="Completion\OverrideCompletionSourceProvider.cs" />
     <Compile Include="DefinitionDarkest\DarkestContentType.cs" />
     <Compile Include="DefinitionDarkest\DarkestData.cs" />
-    <Compile Include="EffectCommandFilter.cs" />
+    <Compile Include="Completion\EffectCommandFilter.cs" />
     <Compile Include="Error\ArtErrorTagger.cs" />
     <Compile Include="Error\DarkestLegacyErrorListProvider.cs" />
     <Compile Include="Error\EffectErrorTagger.cs" />
     <Compile Include="Error\InfoBaseErrorTagger.cs" />
     <Compile Include="Error\InfoErrorTagger.cs" />
     <Compile Include="Error\OverrideErrorTagger.cs" />
-    <Compile Include="InfoCommandFilter.cs" />
-    <Compile Include="OverrideCommandFilter.cs" />
+    <Compile Include="Completion\InfoCommandFilter.cs" />
+    <Compile Include="Completion\OverrideCommandFilter.cs" />
     <Compile Include="TextViewCreationListener.cs" />
     <Compile Include="For_the_Darkest_DungeonPackage.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="AGENT.md" />
+    <None Include="README.md" />
     <None Include="source.extension.vsixmanifest">
       <SubType>Designer</SubType>
     </None>
+    <None Include="TodoList.md" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="PresentationCore" />

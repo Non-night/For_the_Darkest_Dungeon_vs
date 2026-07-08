@@ -13,7 +13,7 @@ using System.Text.RegularExpressions;
 using RegexMatch = System.Text.RegularExpressions.Match;
 using Regex = System.Text.RegularExpressions.Regex;
 
-namespace For_the_Darkest_Dungeon.Classification
+namespace For_the_Darkest_Dungeon.Error
 {
     internal class EffectErrorTagger : ITagger<IErrorTag>
     {
