@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 
 namespace For_the_Darkest_Dungeon.DefinitionDarkest
 {
@@ -292,9 +292,21 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".summon_erase_data_on_roll", StrBoolValues },
             { ".summon_rank_is_previous_monster_class", StrBoolValues }
         };
-    }
 
-    public static class DarkestInfoData
+        // 双布尔类关键字（用于报错检验）
+        public static readonly HashSet<string> DoubleBoolKeywords = new HashSet<string>
+        {
+			".set_monster_class_reset_hp"
+        };
+
+        // 双布尔参数-报错检验用
+        public static readonly List<string> DoubleBoolValuesForError = new List<string>
+        {
+            "0", "1", "false", "true", "False", "True", "FALSE", "TRUE"
+        };
+	}
+
+	public static class DarkestInfoData
     {
         // 1. 所有行首关键字列表 (Header)
         public static readonly List<string> AllHeaders = new List<string>

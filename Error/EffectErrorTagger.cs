@@ -1,4 +1,4 @@
-﻿using For_the_Darkest_Dungeon.DefinitionDarkest;
+using For_the_Darkest_Dungeon.DefinitionDarkest;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Adornments;
 using Microsoft.VisualStudio.Text.Differencing;
@@ -115,6 +115,108 @@ namespace For_the_Darkest_Dungeon.Error
             return false;
         }
 
+		/// <summary>
+		/// 获取一行中 // 注释开始的位置。
+		/// 注意：这里不区分是否位于引号内，因为 // 具有最高注释优先级。
+		/// 若不存在注释则返回 -1。
+		/// </summary>
+		private int GetCommentStartIndex(string lineText)
+		{
+			return lineText.IndexOf("//", StringComparison.Ordinal);
+		}
+
+		/// <summary>
+		/// 将单行文本裁剪为真正参与语法分析的代码部分。
+		/// // 之后直到行尾都视为注释，不参与任何关键字扫描。
+		/// </summary>
+		private string TrimCommentFromLine(string lineText)
+		{
+			int commentIndex = GetCommentStartIndex(lineText);
+			return commentIndex >= 0 ? lineText.Substring(0, commentIndex) : lineText;
+		}
+
+
+		/// <summary>
+		/// 判断当前行是否出现了“行尾注释”。
+		/// 只有 // 前面存在实际代码内容时，才视为行尾注释；
+		/// 若 // 前面只有空白，则仍视为普通注释行，不算行尾注释。
+		/// </summary>
+		private bool TryGetInlineCommentStart(string lineText, out int commentIndex)
+		{
+			commentIndex = GetCommentStartIndex(lineText);
+			if (commentIndex < 0)
+				return false;
+
+			string textBeforeComment = lineText.Substring(0, commentIndex);
+			return !string.IsNullOrWhiteSpace(textBeforeComment);
+		}
+		/// <summary>
+		/// 获取包含指定行号的整个 effect 块文本范围。
+		/// 向前会一直扫描到 effect: 或文件开头，向后会一直扫描到下一个 effect: 或文件末尾。
+		/// 同时会移除每一行中 // 之后的注释内容，以匹配游戏引擎的截断规则。
+		/// </summary>
+		private bool TryGetEffectBlockCodeRange(
+			ITextSnapshot snapshot,
+			int lineNumber,
+			out int blockStart,
+			out int blockEnd,
+			out string blockCodeText)
+		{
+			blockStart = 0;
+			blockEnd = 0;
+			blockCodeText = string.Empty;
+
+			int effectStartLine = -1;
+			for (int i = lineNumber; i >= 0; i--)
+			{
+				ITextSnapshotLine currentLine = snapshot.GetLineFromLineNumber(i);
+				string currentCodeText = TrimCommentFromLine(currentLine.GetText());
+				int colonIndex = GetFirstLogicalColon(currentCodeText);
+
+				if (colonIndex != -1)
+				{
+					string header = currentCodeText.Substring(0, colonIndex + 1).Trim();
+					if (header.Equals("effect:", StringComparison.OrdinalIgnoreCase))
+					{
+						effectStartLine = i;
+						break;
+					}
+				}
+			}
+
+			if (effectStartLine == -1)
+				return false;
+
+			int effectEndLine = snapshot.LineCount - 1;
+			for (int i = effectStartLine + 1; i < snapshot.LineCount; i++)
+			{
+				ITextSnapshotLine currentLine = snapshot.GetLineFromLineNumber(i);
+				string currentCodeText = TrimCommentFromLine(currentLine.GetText());
+				int colonIndex = GetFirstLogicalColon(currentCodeText);
+
+				if (colonIndex != -1)
+				{
+					string header = currentCodeText.Substring(0, colonIndex + 1).Trim();
+					if (header.Equals("effect:", StringComparison.OrdinalIgnoreCase))
+					{
+						effectEndLine = i - 1;
+						break;
+					}
+				}
+			}
+
+			var parts = new List<string>();
+			for (int i = effectStartLine; i <= effectEndLine; i++)
+			{
+				ITextSnapshotLine currentLine = snapshot.GetLineFromLineNumber(i);
+				parts.Add(TrimCommentFromLine(currentLine.GetText()));
+			}
+
+			blockStart = snapshot.GetLineFromLineNumber(effectStartLine).Start.Position;
+			blockEnd = snapshot.GetLineFromLineNumber(effectEndLine).End.Position;
+			blockCodeText = string.Join("\n", parts);
+			return true;
+		}
         private int GetFirstLogicalColon(string lineText)
         {
             var stringMatches = _stringRegex.Matches(lineText).Cast<RegexMatch>();
@@ -504,7 +606,7 @@ namespace For_the_Darkest_Dungeon.Error
 					// 注意：这里只影响“报错判断”，不会修改原始文本。
 					// SnapshotSpan 的位置仍然基于原始 lineText 的下标。
 					// ------------------------------------------------------------
-					int commentIndex = lineText.IndexOf("//", StringComparison.Ordinal);
+					int commentIndex = GetCommentStartIndex(lineText);
 					string codeText = commentIndex >= 0
 						? lineText.Substring(0, commentIndex)
 						: lineText;
@@ -512,6 +614,15 @@ namespace For_the_Darkest_Dungeon.Error
 					// 空行、纯注释行不产生任何错误。
 					if (string.IsNullOrWhiteSpace(codeText))
 						continue;
+
+					// effect 中出现行尾注释时给出警告，提示尽量避免这种写法。
+					if (TryGetInlineCommentStart(lineText, out int inlineCommentIndex))
+					{
+						yield return new TagSpan<IErrorTag>(
+							new SnapshotSpan(snapshot, line.Start.Position + inlineCommentIndex, 2),
+							new ErrorTag(PredefinedErrorTypeNames.Warning, "请尽可能避免行内注释以防游戏识别错误"));
+					}
+
 
 					// ------------------------------------------------------------
 					// 中文字符检查：
@@ -872,11 +983,161 @@ namespace For_the_Darkest_Dungeon.Error
 							}
 						}
 
+						if (keyword == ".skill_instant")
+						{
+							var skillInstantParamMatch = _nextParamRegex.Match(codeText.Substring(match.Index + match.Length));
+							if (skillInstantParamMatch.Success)
+							{
+								string skillInstantQuotedValue = skillInstantParamMatch.Groups[1].Value;
+								string skillInstantPlainValue = skillInstantParamMatch.Groups[2].Value;
+								bool isSkillInstantQuoted = skillInstantParamMatch.Groups[1].Success || skillInstantParamMatch.Value.Contains("\"\"");
+								string skillInstantValue = isSkillInstantQuoted ? skillInstantQuotedValue : skillInstantPlainValue;
+
+								// 当 .skill_instant 的参数为 true 时，向前向后扫描所属整个 effect 块，并忽略每行 // 后的注释内容。
+								if (skillInstantValue == "true" && TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+								{
+									bool hasTargetPerformerInSameEffect = false;
+
+									foreach (RegexMatch sameEffectMatch in _keywordRegex.Matches(effectBlockCodeText))
+									{
+										if (string.Equals(sameEffectMatch.Value, ".target", StringComparison.Ordinal))
+										{
+											var targetParamMatch = _nextParamRegex.Match(effectBlockCodeText.Substring(sameEffectMatch.Index + sameEffectMatch.Length));
+											if (targetParamMatch.Success)
+											{
+												string targetQuotedValue = targetParamMatch.Groups[1].Value;
+												string targetPlainValue = targetParamMatch.Groups[2].Value;
+												bool isTargetQuoted = targetParamMatch.Groups[1].Success || targetParamMatch.Value.Contains("\"\"");
+												string targetValue = isTargetQuoted ? targetQuotedValue : targetPlainValue;
+
+												if (targetValue == "performer")
+												{
+													hasTargetPerformerInSameEffect = true;
+													break;
+												}
+											}
+										}
+									}
+
+									if (!hasTargetPerformerInSameEffect)
+									{
+										string errorMsg = ".skill_instant要求目标必须是performer，否则在技能里会引起游戏崩溃或其他严重错误";
+										var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+										yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
+									}
+								}
+							}
+						}
+
+						if (keyword == ".use_item_id")
+						{
+							// 当存在 .use_item_id 时，向前向后扫描所属整个 effect 块，并忽略每行 // 后的注释内容。
+							bool hasUseItemTypeInSameEffect = false;
+
+							if (TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+							{
+								foreach (RegexMatch sameEffectMatch in _keywordRegex.Matches(effectBlockCodeText))
+								{
+									if (string.Equals(sameEffectMatch.Value, ".use_item_type", StringComparison.Ordinal))
+									{
+										hasUseItemTypeInSameEffect = true;
+										break;
+									}
+								}
+							}
+
+							if (!hasUseItemTypeInSameEffect)
+							{
+								string errorMsg = ".use_item_id要求同一effect内必须同时存在.use_item_type";
+								var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+								yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
+							}
+						}
+						if (keyword == ".daze")
+						{
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(
+									PredefinedErrorTypeNames.Suggestion,
+									$"不建议使用daze，若要使用，请保证理解其效果并避免崩溃与无效问题"));
+						}
+
+						if (keyword == ".guard" || keyword == ".clearguarded" || keyword == ".clearguarding")
+						{
+							var guardParamMatch = _nextParamRegex.Match(codeText.Substring(match.Index + match.Length));
+							if (guardParamMatch.Success)
+							{
+								string guardQuotedValue = guardParamMatch.Groups[1].Value;
+								string guardPlainValue = guardParamMatch.Groups[2].Value;
+								bool isGuardQuoted = guardParamMatch.Groups[1].Success || guardParamMatch.Value.Contains("\"\"");
+								string guardValue = isGuardQuoted ? guardQuotedValue : guardPlainValue;
+
+								// 当守护相关关键字参数为 1 时，检查同一 effect 内的 .chance 是否小于 100%。
+								if (guardValue == "1" && TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+								{
+									bool hasChanceLowerThanHundredPercent = false;
+									var chanceKeywordRegex = new Regex(@"\.chance\s+(?:""([^""]*)""|(\S+))", RegexOptions.Compiled);
+
+									foreach (RegexMatch chanceMatch in chanceKeywordRegex.Matches(effectBlockCodeText))
+									{
+										string chanceValue;
+										if (chanceMatch.Groups[1].Success)
+										{
+											chanceValue = chanceMatch.Groups[1].Value;
+										}
+										else
+										{
+											chanceValue = chanceMatch.Groups[2].Value;
+										}
+										string normalizedChanceValue = chanceValue.Trim();
+
+										if (normalizedChanceValue.EndsWith("%", StringComparison.Ordinal))
+										{
+											string percentNumberText = normalizedChanceValue.Substring(0, normalizedChanceValue.Length - 1);
+											if (double.TryParse(percentNumberText, out double percentValue) && percentValue < 100d)
+											{
+												hasChanceLowerThanHundredPercent = true;
+												break;
+											}
+										}
+										else if (double.TryParse(normalizedChanceValue, out double decimalChanceValue) && decimalChanceValue < 1d)
+										{
+											hasChanceLowerThanHundredPercent = true;
+											break;
+										}
+									}
+
+									if (hasChanceLowerThanHundredPercent)
+									{
+										string warningMsg = "守护和移除守护无法被.chance制约，若要实现概率性的相关效果，请自行寻找其他方案";
+										var warningSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+										yield return new TagSpan<IErrorTag>(warningSpan, new ErrorTag(PredefinedErrorTypeNames.Warning, warningMsg));
+									}
+								}
+							}
+						}
+						if (keyword == ".affliction_blockable_chance")
+						{
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(
+									PredefinedErrorTypeNames.Suggestion,
+									$"不建议使用.affliction_blockable_chance，因为原版所有的折磨均未定义相关权重，此时使用该效果将会引发游戏崩溃"));
+						}
+
 						// 参数合法性检测
 						if (DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out List<string> validValues))
                         {
-							if (DarkestEffectsData.KeywordToValuesMap[keyword] == DarkestEffectsData.StrBoolValues)
+							if (DarkestEffectsData.DoubleBoolKeywords.Contains(keyword))
+							{
+								// 双布尔关键字同时接受数字布尔与字符布尔，并允许字符布尔大小写变体。
+								validValues = DarkestEffectsData.DoubleBoolValuesForError;
+							}
+							else if (DarkestEffectsData.KeywordToValuesMap[keyword] == DarkestEffectsData.StrBoolValues)
+							{
+								// 普通字符布尔关键字允许字符布尔大小写变体参与报错校验。
 								validValues = DarkestEffectsData.StrBoolValuesForError;
+							}
                             var remainingText = codeText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
                             if (paramMatch.Success)
@@ -887,12 +1148,94 @@ namespace For_the_Darkest_Dungeon.Error
                                 string actualValue = isQuoted ? valInQuote : valPlain;
 
                                 bool isParamValid = validValues.Contains(actualValue);
+								bool isInvalidParamAllowed = false;
 
-                                if (!isParamValid)
+								// 计算参数值在原始行中的范围，供特殊警告精确标记到参数本身使用。
+								int valOffset = isQuoted ? paramMatch.Value.IndexOf('"') : paramMatch.Value.IndexOf(actualValue);
+								int valueStart = line.Start + match.Index + match.Length + paramMatch.Index + valOffset;
+								int valueLen = isQuoted ? (paramMatch.Groups[1].Length + 2) : actualValue.Length;
+
+								// 对于特殊参数的特判
+								if (keyword == ".steal_buff_source_type")
+								{
+									if (actualValue == "bsrc_district")
+									{
+										int warningStart = line.Start + match.Index;
+										int warningLen = match.Length;
+
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, warningStart, warningLen),
+											new ErrorTag(PredefinedErrorTypeNames.Warning, "建筑源buff不可再生，请谨慎驱散")
+										);
+									}
+									else if (actualValue == "bsrc_skill")
+									{
+										int warningStart = line.Start + match.Index;
+										int warningLen = match.Length;
+
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, warningStart, warningLen),
+											new ErrorTag(PredefinedErrorTypeNames.Warning, "谨慎驱散技能源，以防破坏他人机制")
+										);
+									}
+									else if (!isParamValid)
+									{
+										isInvalidParamAllowed = true;
+
+										int warningStart = line.Start + match.Index;
+										int warningLen = match.Length;
+
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, warningStart, warningLen),
+											new ErrorTag(PredefinedErrorTypeNames.Warning, "自定义Buff源将被视为combat_end源")
+										);
+									}
+								}
+								else if (keyword == ".steal_buff_stat_type")
+								{
+									bool isAllowedStealBuffStatType =
+										actualValue == "hp_dot_bleed" ||
+										actualValue == "hp_dot_poison" ||
+										actualValue == "hp_dot_heal" ||
+										actualValue == "stress_dot" ||
+										actualValue == "shuffle_dot";
+
+									if (!isAllowedStealBuffStatType)
+									{
+										int warningStart = line.Start + match.Index;
+										int warningLen = match.Length;
+
+										yield return new TagSpan<IErrorTag>(
+											new SnapshotSpan(snapshot, warningStart, warningLen),
+											new ErrorTag(PredefinedErrorTypeNames.Warning, "慎用超级真驱散，以免破坏他人机制")
+										);
+									}
+								}
+                                else if (keyword == ".buff_duration_type" && actualValue == "none")
+								{
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, valueStart, valueLen),
+										new ErrorTag(PredefinedErrorTypeNames.Warning, "在effect中，none这种持续类型将会被视为round")
+									);
+								}
+								else if ((keyword == ".dotSource" || keyword == ".buff_source_type") && !isParamValid)
+								{
+									isInvalidParamAllowed = true;
+
+									int warningStart = line.Start + match.Index;
+									int warningLen = match.Length;
+
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, warningStart, warningLen),
+										new ErrorTag(PredefinedErrorTypeNames.Warning, "自定义Buff源将被视为combat_end源")
+									);
+								}
+
+								// 常规情况
+								if (!isParamValid && !isInvalidParamAllowed)
                                 {
-                                    int valOffset = isQuoted ? paramMatch.Value.IndexOf('"') : paramMatch.Value.IndexOf(actualValue);
-                                    int errorStart = line.Start + match.Index + match.Length + paramMatch.Index + valOffset;
-                                    int errorLen = isQuoted ? (paramMatch.Groups[1].Length + 2) : actualValue.Length;
+                                    int errorStart = valueStart;
+                                    int errorLen = valueLen;
 
                                     yield return new TagSpan<IErrorTag>(
                                         new SnapshotSpan(snapshot, errorStart, errorLen),
@@ -901,16 +1244,15 @@ namespace For_the_Darkest_Dungeon.Error
                                 }
                                 else if (isQuoted && DarkestEffectsData.NumBoolValues.Contains(actualValue))
                                 {
-                                    int valOffset = paramMatch.Value.IndexOf('"');
-                                    int errorStart = line.Start + match.Index + match.Length + paramMatch.Index + valOffset;
-                                    int errorLen = isQuoted ? (paramMatch.Groups[1].Length + 2) : actualValue.Length;
+                                    int errorStart = valueStart;
+                                    int errorLen = valueLen;
 
                                     yield return new TagSpan<IErrorTag>(
                                         new SnapshotSpan(snapshot, errorStart, errorLen),
                                         new ErrorTag(PredefinedErrorTypeNames.SyntaxError, $"值 '{actualValue}' 不应带引号")
                                     );
                                 }
-                            }
+							}
                         }
                     }
                 }
