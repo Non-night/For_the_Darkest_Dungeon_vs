@@ -21,7 +21,7 @@ namespace For_the_Darkest_Dungeon.Error
 
         private readonly Regex _keywordRegex = new Regex(@"\.[a-zA-Z_][a-zA-Z0-9_]*", RegexOptions.Compiled);
         private readonly Regex _stringRegex = new Regex(@"""([^""]*)""", RegexOptions.Compiled);
-        private readonly Regex _nextParamRegex = new Regex(@"^\s+(?:""([^""]*)""|([a-zA-Z0-9_]+))", RegexOptions.Compiled);
+        private readonly Regex _nextParamRegex = new Regex(@"^\s+(?:""([^""]*)""|(-?\d+(?:\.\d+)?%?|[a-zA-Z0-9_]+))", RegexOptions.Compiled);
 
 		private static readonly string[] DotKeywordsToCheck = new[]
 		{
@@ -134,7 +134,6 @@ namespace For_the_Darkest_Dungeon.Error
 			int commentIndex = GetCommentStartIndex(lineText);
 			return commentIndex >= 0 ? lineText.Substring(0, commentIndex) : lineText;
 		}
-
 
 		/// <summary>
 		/// 判断当前行是否出现了“行尾注释”。
@@ -612,7 +611,6 @@ namespace For_the_Darkest_Dungeon.Error
 			}
 		}
 
-
 		public IEnumerable<ITagSpan<IErrorTag>> GetTags(NormalizedSnapshotSpanCollection spans)
         {
             foreach (var span in spans)
@@ -649,7 +647,6 @@ namespace For_the_Darkest_Dungeon.Error
 							new SnapshotSpan(snapshot, line.Start.Position + inlineCommentIndex, 2),
 							new ErrorTag(PredefinedErrorTypeNames.Warning, "请尽可能避免行内注释以防游戏识别错误"));
 					}
-
 
 					// ------------------------------------------------------------
 					// 中文字符检查：

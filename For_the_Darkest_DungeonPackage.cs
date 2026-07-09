@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell;
 using System;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -25,8 +25,12 @@ namespace For_the_Darkest_Dungeon
     /// </remarks>
     [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
     [Guid(For_the_Darkest_DungeonPackage.PackageGuidString)]
+    [ProvideOptionPage(typeof(GeneralOptionsPage), "For The Darkest Dungeon", "General", 0, 0, true)]
+    [ProvideOptionPage(typeof(ColoursOptionsPage), "For The Darkest Dungeon", "Colours", 0, 0, true)]
     public sealed class For_the_Darkest_DungeonPackage : AsyncPackage
     {
+        public static For_the_Darkest_DungeonPackage Instance { get; private set; }
+
         /// <summary>
         /// For_the_Darkest_DungeonPackage GUID string.
         /// </summary>
@@ -46,6 +50,7 @@ namespace For_the_Darkest_Dungeon
             // When initialized asynchronously, the current thread may be a background thread at this point.
             // Do any initialization that requires the UI thread after switching to the UI thread.
             await this.JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
+            Instance = this;
         }
 
         #endregion

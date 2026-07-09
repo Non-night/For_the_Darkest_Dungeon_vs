@@ -1,4 +1,4 @@
-﻿using Microsoft.VisualStudio;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Language.Intellisense;
 using Microsoft.VisualStudio.OLE.Interop;
 using Microsoft.VisualStudio.Shell;
@@ -155,7 +155,12 @@ namespace For_the_Darkest_Dungeon.Completion
 		{
 			int dotPos = caretPos.Position - 1;
 
-			if (dotPos >= line.Start.Position && IsDotAtValidKeywordStart(snapshot, dotPos))
+			if (dotPos < line.Start.Position)
+			{
+				return;
+			}
+
+			if (IsDotAtValidKeywordStart(snapshot, dotPos))
 			{
 				TriggerCompletion();
 			}
@@ -166,25 +171,25 @@ namespace For_the_Darkest_Dungeon.Completion
 		}
 
 		/// <summary>
-		/// 处理字母、数字、下划线输入。
-		/// 如果当前处于合法的 .关键字 token 中，则走公共关键字补全逻辑；
-		/// 否则交给子类决定如何处理参数补全或默认过滤。
+		/// 处理普通单词字符。
+		/// 若当前 token 是合法 .关键字，则按关键字补全逻辑处理；
+		/// 否则交由子类处理其自定义上下文。
 		/// </summary>
 		private void HandleWordChar(ITextSnapshot snapshot, SnapshotPoint caretPos, string lineText, string trimmedText)
 		{
-			string currentToken;
-
-			if (TryGetValidDotKeywordToken(snapshot, caretPos, out currentToken))
+			if (TryGetValidDotKeywordToken(snapshot, caretPos, out string currentToken))
 			{
-				// 短输入阶段保留 VS 自带过滤，输入更流畅；
-				// 稍长后重新触发完整补全，保留原有模糊匹配行为。
-				if (currentToken.Length <= 2 && HasActiveSession())
+				if (currentToken.Length > 1)
 				{
-					_currentSession.Filter();
-				}
-				else
-				{
-					TriggerCompletion();
+					if (!HasActiveSession())
+					{
+						TriggerCompletion();
+					}
+					else
+					{
+						FilterActiveSession();
+						ForceSelectCompletion();
+					}
 				}
 
 				return;
@@ -194,29 +199,29 @@ namespace For_the_Darkest_Dungeon.Completion
 		}
 
 		/// <summary>
-		/// 判断当前输入是否应该触发 Header 补全。
-		/// 该规则由 Info / Art / Override 共用。
+		/// 判断是否应该触发 Header 补全。
+		/// 默认：仅当当前行以 identifier: 形式结束时返回 true。
 		/// </summary>
 		protected virtual bool ShouldTriggerHeaderCompletion(char typedChar, string lineText)
 		{
-			return false;
+			return typedChar == ':' && SupportsHeaderCompletion;
 		}
 
 		/// <summary>
-		/// 判断输入空格后是否应该触发补全。
-		/// 由子类决定各自的关键字与参数上下文。
-		/// </summary>
-		protected abstract bool ShouldTriggerCompletionOnSpace(string lineText, string trimmedText);
-
-		/// <summary>
-		/// 处理“当前不在合法 .关键字 token 中”时的字母数字输入。
-		/// 典型场景是参数补全、连续参数补全，或者沿用 VS 默认过滤。
+		/// 处理非 .关键字 token 输入。
+		/// 子类可按自身参数上下文决定是否触发 / 过滤 / 关闭补全。
 		/// </summary>
 		protected abstract void HandleNonDotTokenWordChar(
 			ITextSnapshot snapshot,
 			SnapshotPoint caretPos,
 			string lineText,
 			string trimmedText);
+
+		/// <summary>
+		/// 处理空格输入后是否触发补全。
+		/// 子类按关键字语义覆写。
+		/// </summary>
+		protected abstract bool ShouldTriggerCompletionOnSpace(string lineText, string trimmedText);
 
 		/// <summary>
 		/// 判断是否处于连续参数补全的上下文中。
