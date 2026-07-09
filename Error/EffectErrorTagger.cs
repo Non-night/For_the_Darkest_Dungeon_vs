@@ -1138,49 +1138,68 @@ namespace For_the_Darkest_Dungeon.Error
 								string guardPlainValue = guardParamMatch.Groups[2].Value;
 								bool isGuardQuoted = guardParamMatch.Groups[1].Success || guardParamMatch.Value.Contains("\"\"");
 								string guardValue = isGuardQuoted ? guardQuotedValue : guardPlainValue;
+                                // 当守护相关关键字参数为 1 时，只有在 .on_hit / .on_miss 至少有一个显式为 true 时，
+                                // 才检查同一 effect 内的 .chance 是否小于 100%。
+                                if (guardValue == "1" && TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+                                {
+                                    bool hasActiveOnHitOrOnMiss = false;
+                                    string onHitValue;
+                                    string onMissValue;
+                                    bool hasOnHit = TryGetFirstEffectBlockParameterValue(effectBlockCodeText, ".on_hit", out onHitValue);
+                                    bool hasOnMiss = TryGetFirstEffectBlockParameterValue(effectBlockCodeText, ".on_miss", out onMissValue);
 
-								// 当守护相关关键字参数为 1 时，检查同一 effect 内的 .chance 是否小于 100%。
-								if (guardValue == "1" && TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
-								{
-									bool hasChanceLowerThanHundredPercent = false;
-									var chanceKeywordRegex = new Regex(@"\.chance\s+(?:""([^""]*)""|(\S+))", RegexOptions.Compiled);
+                                    if (hasOnHit && string.Equals(onHitValue?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        hasActiveOnHitOrOnMiss = true;
+                                    }
 
-									foreach (RegexMatch chanceMatch in chanceKeywordRegex.Matches(effectBlockCodeText))
-									{
-										string chanceValue;
-										if (chanceMatch.Groups[1].Success)
-										{
-											chanceValue = chanceMatch.Groups[1].Value;
-										}
-										else
-										{
-											chanceValue = chanceMatch.Groups[2].Value;
-										}
-										string normalizedChanceValue = chanceValue.Trim();
+                                    if (hasOnMiss && string.Equals(onMissValue?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        hasActiveOnHitOrOnMiss = true;
+                                    }
 
-										if (normalizedChanceValue.EndsWith("%", StringComparison.Ordinal))
-										{
-											string percentNumberText = normalizedChanceValue.Substring(0, normalizedChanceValue.Length - 1);
-											if (double.TryParse(percentNumberText, out double percentValue) && percentValue < 100d)
-											{
-												hasChanceLowerThanHundredPercent = true;
-												break;
-											}
-										}
-										else if (double.TryParse(normalizedChanceValue, out double decimalChanceValue) && decimalChanceValue < 1d)
-										{
-											hasChanceLowerThanHundredPercent = true;
-											break;
-										}
-									}
+                                    if (hasActiveOnHitOrOnMiss)
+                                    {
+                                        bool hasChanceLowerThanHundredPercent = false;
+                                        var chanceKeywordRegex = new Regex(@"\.chance\s+(?:""([^""]*)""|(\S+))", RegexOptions.Compiled);
 
-									if (hasChanceLowerThanHundredPercent)
-									{
-										string warningMsg = "守护和移除守护无法被.chance制约，若要实现概率性的相关效果，请自行寻找其他方案";
-										var warningSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
-										yield return new TagSpan<IErrorTag>(warningSpan, new ErrorTag(PredefinedErrorTypeNames.Warning, warningMsg));
-									}
-								}
+                                        foreach (RegexMatch chanceMatch in chanceKeywordRegex.Matches(effectBlockCodeText))
+                                        {
+                                            string chanceValue;
+                                            if (chanceMatch.Groups[1].Success)
+                                            {
+                                                chanceValue = chanceMatch.Groups[1].Value;
+                                            }
+                                            else
+                                            {
+                                                chanceValue = chanceMatch.Groups[2].Value;
+                                            }
+                                            string normalizedChanceValue = chanceValue.Trim();
+
+                                            if (normalizedChanceValue.EndsWith("%", StringComparison.Ordinal))
+                                            {
+                                                string percentNumberText = normalizedChanceValue.Substring(0, normalizedChanceValue.Length - 1);
+                                                if (double.TryParse(percentNumberText, out double percentValue) && percentValue < 100d)
+                                                {
+                                                    hasChanceLowerThanHundredPercent = true;
+                                                    break;
+                                                }
+                                            }
+                                            else if (double.TryParse(normalizedChanceValue, out double decimalChanceValue) && decimalChanceValue < 1d)
+                                            {
+                                                hasChanceLowerThanHundredPercent = true;
+                                                break;
+                                            }
+                                        }
+
+                                        if (hasChanceLowerThanHundredPercent)
+                                        {
+                                            string warningMsg = "守护和移除守护无法被.chance制约，若要实现概率性的相关效果，请自行寻找其他方案";
+                                            var warningSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+                                            yield return new TagSpan<IErrorTag>(warningSpan, new ErrorTag(PredefinedErrorTypeNames.Warning, warningMsg));
+                                        }
+                                    }
+                                }
 							}
 						}
 						if (keyword == ".affliction_blockable_chance")
@@ -1232,7 +1251,7 @@ namespace For_the_Darkest_Dungeon.Error
 
 										yield return new TagSpan<IErrorTag>(
 											new SnapshotSpan(snapshot, warningStart, warningLen),
-											new ErrorTag(PredefinedErrorTypeNames.Warning, "建筑源buff不可再生，请谨慎驱散")
+											new ErrorTag(PredefinedErrorTypeNames.Warning, "建筑源buff不可再生，请谨慎偷取/驱散")
 										);
 									}
 									else if (actualValue == "bsrc_skill")
@@ -1242,7 +1261,7 @@ namespace For_the_Darkest_Dungeon.Error
 
 										yield return new TagSpan<IErrorTag>(
 											new SnapshotSpan(snapshot, warningStart, warningLen),
-											new ErrorTag(PredefinedErrorTypeNames.Warning, "谨慎驱散技能源，以防破坏他人机制")
+											new ErrorTag(PredefinedErrorTypeNames.Warning, "谨慎偷取/驱散技能源，以防破坏他人机制")
 										);
 									}
 									else if (!isParamValid)
