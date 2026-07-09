@@ -1034,7 +1034,7 @@ namespace For_the_Darkest_Dungeon.Error
 												bool isTargetQuoted = targetParamMatch.Groups[1].Success || targetParamMatch.Value.Contains("\"\"");
 												string targetValue = isTargetQuoted ? targetQuotedValue : targetPlainValue;
 
-												if (targetValue == "performer")
+												if (targetValue != "target" && targetValue != "target_enemy_group")
 												{
 													hasTargetPerformerInSameEffect = true;
 													break;
@@ -1045,7 +1045,7 @@ namespace For_the_Darkest_Dungeon.Error
 
 									if (!hasTargetPerformerInSameEffect)
 									{
-										string errorMsg = ".skill_instant要求目标必须是performer，否则在技能里会引起游戏崩溃或其他严重错误";
+										string errorMsg = ".skill_instant要求目标不能是target或target_enemy_group，否则在技能里会引起游戏崩溃或其他严重错误";
 										var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
 										yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
 									}
