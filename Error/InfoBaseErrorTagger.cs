@@ -1,4 +1,4 @@
-﻿using For_the_Darkest_Dungeon.DefinitionDarkest;
+using For_the_Darkest_Dungeon.DefinitionDarkest;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Adornments;
 using Microsoft.VisualStudio.Text.Tagging;
@@ -269,6 +269,21 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
+		/// 判断当前行是否出现了“行尾注释”。
+		/// 只有 // 前面存在实际代码内容时，才视为行尾注释；
+		/// 若 // 前面只有空白，则仍视为普通注释行，不算行尾注释。
+		/// </summary>
+		private bool TryGetInlineCommentStart(string lineText, out int commentIndex)
+		{
+			commentIndex = lineText.IndexOf("//", StringComparison.Ordinal);
+			if (commentIndex < 0)
+				return false;
+
+			string textBeforeComment = lineText.Substring(0, commentIndex);
+			return !string.IsNullOrWhiteSpace(textBeforeComment);
+		}
+
+		/// <summary>
 		/// 取出真正的 header
 		/// </summary>
 		private string GetHeaderName(RegexMatch headerMatch)
@@ -332,6 +347,16 @@ namespace For_the_Darkest_Dungeon.Error
 					// 空行、纯注释行直接跳过。
 					if (string.IsNullOrWhiteSpace(codeText))
 						continue;
+
+					// Info / Art / Override 中出现行尾注释时直接报错，避免潜在的严重识别错误。
+					if (TryGetInlineCommentStart(lineText, out int inlineCommentIndex))
+					{
+						yield return CreateError(
+							snapshot,
+							line.Start.Position + inlineCommentIndex,
+							2,
+							"Info/Art/Override里的行内注释有可能造成严重的识别错误，其具体机制暂不明确，请避免");
+					}
 
 					// ------------------------------------------------------------
 					// 中文字符检查：

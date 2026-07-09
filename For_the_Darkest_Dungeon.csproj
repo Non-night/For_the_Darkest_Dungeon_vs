@@ -45,15 +45,20 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="ArtCommandFilter.cs" />
+    <Compile Include="Completion\ArtCommandFilter.cs" />
     <Compile Include="Classification\ArtClassifier.cs" />
+    <Compile Include="Classification\ColoursClassifier.cs" />
+    <Compile Include="Classification\ColoursColorAdornmentTagger.cs" />
     <Compile Include="Classification\ClassificationTypes.cs" />
     <Compile Include="Classification\EffectClassifier.cs" />
     <Compile Include="Classification\InfoBaseClassifier.cs" />
     <Compile Include="Classification\InfoClassifier.cs" />
     <Compile Include="Classification\OverrideClassifier.cs" />
     <Compile Include="Completion\ArtCompletionSourceProvider.cs" />
+    <Compile Include="Completion\BaseDarkestCommandFilter.cs" />
+    <Compile Include="Completion\BaseSharedInfoLikeCommandFilter.cs" />
     <Compile Include="Completion\EffectCompletionSourceProvider.cs" />
+    <Compile Include="Completion\DarkestToggleCommentCommandFilter.cs" />
     <Compile Include="Completion\FuzzyCompletionCache.cs" />
     <Compile Include="Completion\FuzzyCompletionSet.cs" />
     <Compile Include="Completion\InfoBaseCompletionSourceProvider.cs" />
@@ -61,27 +66,39 @@
     <Compile Include="Completion\OverrideCompletionSourceProvider.cs" />
     <Compile Include="DefinitionDarkest\DarkestContentType.cs" />
     <Compile Include="DefinitionDarkest\DarkestData.cs" />
-    <Compile Include="EffectCommandFilter.cs" />
+    <Compile Include="Completion\EffectCommandFilter.cs" />
     <Compile Include="Error\ArtErrorTagger.cs" />
     <Compile Include="Error\DarkestLegacyErrorListProvider.cs" />
     <Compile Include="Error\EffectErrorTagger.cs" />
     <Compile Include="Error\InfoBaseErrorTagger.cs" />
     <Compile Include="Error\InfoErrorTagger.cs" />
     <Compile Include="Error\OverrideErrorTagger.cs" />
-    <Compile Include="InfoCommandFilter.cs" />
-    <Compile Include="OverrideCommandFilter.cs" />
+    <Compile Include="Completion\InfoCommandFilter.cs" />
+    <Compile Include="Completion\OverrideCommandFilter.cs" />
     <Compile Include="TextViewCreationListener.cs" />
     <Compile Include="For_the_Darkest_DungeonPackage.cs" />
+    <Compile Include="ColoursOptionsPage.cs">
+      <SubType>Component</SubType>
+    </Compile>
+    <Compile Include="GeneralOptionsPage.cs">
+      <SubType>Component</SubType>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="AGENT.md" />
+    <None Include="README.md" />
     <None Include="source.extension.vsixmanifest">
       <SubType>Designer</SubType>
     </None>
+    <None Include="TodoList.md" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="PresentationCore" />
+    <Reference Include="PresentationFramework" />
     <Reference Include="System" />
+    <Reference Include="System.Xaml" />
+    <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies">
@@ -103,11 +120,4 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Import Project="$(VSToolsPath)\VSSDK\Microsoft.VsSDK.targets" Condition="'$(VSToolsPath)' != ''" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it.
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>
