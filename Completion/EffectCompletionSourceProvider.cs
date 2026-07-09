@@ -1,4 +1,4 @@
-﻿using For_the_Darkest_Dungeon.DefinitionDarkest;
+using For_the_Darkest_Dungeon.DefinitionDarkest;
 using Microsoft.VisualStudio.Language.Intellisense;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Utilities;
@@ -134,6 +134,39 @@ namespace For_the_Darkest_Dungeon.Completion
 				null));
 		}
 
+		/// <summary>
+		/// 从当前行已输入的代码中提取指定 effect 关键字的第一个参数值。
+		/// 这里会忽略当前行 // 之后的内容，以与 effect 语法解析规则保持一致。
+		/// </summary>
+		private bool TryGetEffectKeywordValueFromCurrentLine(
+			string lineText,
+			string keyword,
+			out string actualValue)
+		{
+			actualValue = null;
+
+			int commentIndex = lineText.IndexOf("//", StringComparison.Ordinal);
+			string codeText = commentIndex >= 0 ? lineText.Substring(0, commentIndex) : lineText;
+
+			var keywordRegex = new Regex(@"\.[a-zA-Z_][a-zA-Z0-9_]*", RegexOptions.Compiled);
+			var nextParamRegex = new Regex(@"^\s+(?:""([^""]*)""|([^\s]+))", RegexOptions.Compiled);
+
+			foreach (Match keywordMatch in keywordRegex.Matches(codeText))
+			{
+				if (!string.Equals(keywordMatch.Value, keyword, StringComparison.Ordinal))
+					continue;
+
+				Match paramMatch = nextParamRegex.Match(codeText.Substring(keywordMatch.Index + keywordMatch.Length));
+				if (!paramMatch.Success)
+					return false;
+
+				actualValue = paramMatch.Groups[1].Success ? paramMatch.Groups[1].Value : paramMatch.Groups[2].Value;
+				return true;
+			}
+
+			return false;
+		}
+
 		private bool TryGetEffectParameterCompletion(
 	ITextSnapshot snapshot,
 	int lineStart,
@@ -187,6 +220,24 @@ namespace For_the_Darkest_Dungeon.Completion
 
 			if (!DarkestEffectsData.KeywordToValuesMap.TryGetValue(keyword, out var values))
 				return false;
+
+			if (keyword == ".buff_sub_type")
+			{
+				string lineText = snapshot.GetText(lineStart, curPos - lineStart);
+				string buffTypeValue;
+				if (!TryGetEffectKeywordValueFromCurrentLine(lineText, ".buff_type", out buffTypeValue))
+					return false;
+
+				// 对于允许自由书写副类型的主类型，这里不弹出补全
+				if (DarkestEffectsData.SubFreeBuffTypes.Contains(buffTypeValue))
+					return false;
+
+				// 只有存在明确映射关系时，才对副类型补全进行收窄。
+				if (!DarkestEffectsData.BuffTypeToSubTypesMap.ContainsKey(buffTypeValue))
+					return false;
+
+				values = DarkestEffectsData.BuffTypeToSubTypesMap[buffTypeValue].ToList();
+			}
 
 			argumentStart = tokenStart;
 

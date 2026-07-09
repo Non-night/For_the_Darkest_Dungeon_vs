@@ -132,5 +132,18 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
 		[FileExtension(".override.darkest")]
 		[ContentType("darkest-override")]
 		public static FileExtensionToContentTypeDefinition DarkestOverrideFileExtension;
+
+		// ==========================================
+		// 5. Colours 文件格式定义 (.colours.darkest)
+		// ==========================================
+		[Export]
+		[Name("darkest-colours")]
+		[BaseDefinition("code")]
+		public static ContentTypeDefinition DarkestColoursContentType;
+
+		[Export]
+		[FileExtension(".colours.darkest")]
+		[ContentType("darkest-colours")]
+		public static FileExtensionToContentTypeDefinition DarkestColoursFileExtension;
 	}
 }

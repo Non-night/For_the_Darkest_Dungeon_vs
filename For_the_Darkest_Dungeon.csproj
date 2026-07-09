@@ -47,6 +47,8 @@
   <ItemGroup>
     <Compile Include="Completion\ArtCommandFilter.cs" />
     <Compile Include="Classification\ArtClassifier.cs" />
+    <Compile Include="Classification\ColoursClassifier.cs" />
+    <Compile Include="Classification\ColoursColorAdornmentTagger.cs" />
     <Compile Include="Classification\ClassificationTypes.cs" />
     <Compile Include="Classification\EffectClassifier.cs" />
     <Compile Include="Classification\InfoBaseClassifier.cs" />
@@ -87,6 +89,8 @@
   <ItemGroup>
     <Reference Include="PresentationCore" />
     <Reference Include="System" />
+    <Reference Include="PresentationFramework" />
+    <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.5.ReferenceAssemblies">

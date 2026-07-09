@@ -304,6 +304,35 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         {
             "0", "1", "false", "true", "False", "True", "FALSE", "TRUE"
         };
+
+        // 简写buff相关
+        // 主副类型对应
+        public static readonly Dictionary<string, HashSet<string>> BuffTypeToSubTypesMap = new Dictionary<string, HashSet<string>>
+        {
+            { "hp_heal_amount", new HashSet<string> { "hero_skill", "hero_skill_multi_target", "monster_skill", "monster_skill_multi_target", "camp_skill", "camp_skill_multi_target", "companion", "eat", "act_out", "damage_heal", "effect", "flashback", "dot", "curio" } },
+            { "hp_heal_percent", new HashSet<string> { "hero_skill", "hero_skill_multi_target", "monster_skill", "monster_skill_multi_target", "camp_skill", "camp_skill_multi_target", "companion", "eat", "act_out", "damage_heal", "effect", "flashback", "dot", "curio" } },
+            { "hp_heal_received_percent", new HashSet<string> { "hero_skill", "hero_skill_multi_target", "monster_skill", "monster_skill_multi_target", "camp_skill", "camp_skill_multi_target", "companion", "eat", "act_out", "damage_heal", "effect", "flashback", "dot", "curio" } },
+            { "combat_stat_multiply", new HashSet<string> { "max_hp", "damage_low", "damage_high", "attack_rating", "crit_chance", "defense_rating", "protection_rating", "speed_rating" } },
+            { "combat_stat_add", new HashSet<string> { "max_hp", "damage_low", "damage_high", "attack_rating", "crit_chance", "defense_rating", "protection_rating", "speed_rating" } },
+            { "resistance", new HashSet<string> { "stun", "move", "poison", "bleed", "disease", "debuff", "death_blow", "trap" } },
+            { "stress_dmg_percent", new HashSet<string> { "hunger", "death_blow", "hero_crit", "hero_killing_blow", "mode", "control", "unkown", "town_idle", "quest_fail", "pass", "camping_relieve_stress", "camping_eat", "tile", "retreat", "effect", "capture", "monster_crit" } },
+            { "stress_dmg_received_percent", new HashSet<string> { "hunger", "death_blow", "hero_crit", "hero_killing_blow", "mode", "control", "unkown", "town_idle", "quest_fail", "pass", "camping_relieve_stress", "camping_eat", "tile", "retreat", "effect", "capture", "monster_crit" } },
+            { "stress_heal_percent", new HashSet<string> { "hunger", "death_blow", "hero_crit", "hero_killing_blow", "mode", "control", "unkown", "town_idle", "quest_fail", "pass", "camping_relieve_stress", "camping_eat", "tile", "retreat", "effect", "capture", "monster_crit" } },
+            { "stress_heal_received_percent", new HashSet<string> { "hunger", "death_blow", "hero_crit", "hero_killing_blow", "mode", "control", "unkown", "town_idle", "quest_fail", "pass", "camping_relieve_stress", "camping_eat", "tile", "retreat", "effect", "capture", "monster_crit" } },
+            { "activity_side_effect_chance", new HashSet<string> { "add_currency", "remove_currency", "add_trinket", "remove_trinket", "activity_lock", "apply_buff", "go_missing" } },
+            { "disable_combat_skill_attribute", new HashSet<string> { "heal", "buff", "debuff", "bleed", "poison", "stun", "tag", "stress", "move", "guard", "daze" } }
+        };
+		// 必须写副类型的主类型
+        public static readonly HashSet<string> MustHaveSubBuffTypes = new HashSet<string>
+        {
+            "combat_stat_multiply", "combat_stat_add", "resistance", "activity_side_effect_chance", "disable_combat_skill_attribute"
+        };
+		// 副类型可以自由填写的主类型
+		public static readonly HashSet<string> SubFreeBuffTypes = new HashSet<string>
+        {
+			"upgrade_discount", "riposte", "quirk_tag_evolution_duration"
+		};
+
 	}
 
 	public static class DarkestInfoData

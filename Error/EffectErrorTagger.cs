@@ -150,6 +150,33 @@ namespace For_the_Darkest_Dungeon.Error
 			string textBeforeComment = lineText.Substring(0, commentIndex);
 			return !string.IsNullOrWhiteSpace(textBeforeComment);
 		}
+
+		/// <summary>
+		/// 从整段 effect 代码中提取指定关键字的第一个参数值。
+		/// 该方法依赖已经去除行内注释后的 effect 块文本。
+		/// </summary>
+		private bool TryGetFirstEffectBlockParameterValue(
+			string effectBlockCodeText,
+			string keyword,
+			out string actualValue)
+		{
+			actualValue = null;
+
+			foreach (RegexMatch keywordMatch in _keywordRegex.Matches(effectBlockCodeText))
+			{
+				if (!string.Equals(keywordMatch.Value, keyword, StringComparison.Ordinal))
+					continue;
+
+				RegexMatch paramMatch = _nextParamRegex.Match(effectBlockCodeText.Substring(keywordMatch.Index + keywordMatch.Length));
+				if (!paramMatch.Success)
+					return false;
+
+				actualValue = paramMatch.Groups[1].Success ? paramMatch.Groups[1].Value : paramMatch.Groups[2].Value;
+				return true;
+			}
+
+			return false;
+		}
 		/// <summary>
 		/// 获取包含指定行号的整个 effect 块文本范围。
 		/// 向前会一直扫描到 effect: 或文件开头，向后会一直扫描到下一个 effect: 或文件末尾。
@@ -1051,6 +1078,49 @@ namespace For_the_Darkest_Dungeon.Error
 								string errorMsg = ".use_item_id要求同一effect内必须同时存在.use_item_type";
 								var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
 								yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
+							}
+						}
+
+						if (keyword == ".buff_type")
+						{
+							// 当存在 .buff_type 时，检查同一条 effect 内的 buff 数值与主副类型联动规则。
+							if (TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+							{
+								string buffTypeValue;
+								string buffAmountValue;
+								string buffSubTypeValue;
+								bool hasBuffTypeValue = TryGetFirstEffectBlockParameterValue(effectBlockCodeText, ".buff_type", out buffTypeValue);
+								bool hasBuffAmount = TryGetFirstEffectBlockParameterValue(effectBlockCodeText, ".buff_amount", out buffAmountValue);
+								bool hasBuffSubType = TryGetFirstEffectBlockParameterValue(effectBlockCodeText, ".buff_sub_type", out buffSubTypeValue);
+
+								if (hasBuffTypeValue)
+								{
+									var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+
+									if (!hasBuffAmount)
+									{
+										yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, "buff必须有数值"));
+									}
+
+									if (DarkestEffectsData.MustHaveSubBuffTypes.Contains(buffTypeValue))
+									{
+										if (!hasBuffSubType)
+										{
+											yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, buffTypeValue + "类型的buff必须声明buff_sub_type"));
+										}
+									}
+									else if (DarkestEffectsData.BuffTypeToSubTypesMap.ContainsKey(buffTypeValue))
+									{
+										if (hasBuffSubType && !DarkestEffectsData.BuffTypeToSubTypesMap[buffTypeValue].Contains(buffSubTypeValue))
+										{
+											yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, buffSubTypeValue + "不属于" + buffTypeValue));
+										}
+									}
+									else if (!DarkestEffectsData.SubFreeBuffTypes.Contains(buffTypeValue) && hasBuffSubType)
+									{
+										yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, buffTypeValue + " buff类型没有buff_sub_type"));
+									}
+								}
 							}
 						}
 						if (keyword == ".daze")
