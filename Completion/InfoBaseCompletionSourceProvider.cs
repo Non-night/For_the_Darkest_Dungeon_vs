@@ -1,4 +1,4 @@
-﻿using For_the_Darkest_Dungeon.DefinitionDarkest;
+using For_the_Darkest_Dungeon.DefinitionDarkest;
 using Microsoft.VisualStudio.Language.Intellisense;
 using Microsoft.VisualStudio.Text;
 using System;
@@ -182,8 +182,9 @@ namespace For_the_Darkest_Dungeon.Completion
 								activeHeader,
 								out List<string> kws))
 						{
+							// 关键字补全需要按整个同类 Header 块去重，已经在同一块内出现过的关键字不再重复给出。
 							resultList = FuzzyCompletionCache.GetMatches(
-								kws,
+								GetAvailableHeaderKeywords(snapshot, line.LineNumber, activeHeader, kws, currentWord),
 								currentWord);
 
 							startPos = wordStart;
@@ -218,6 +219,106 @@ namespace For_the_Darkest_Dungeon.Completion
 						completions,
 						null));
 				}
+			}
+
+			/// <summary>
+			/// 获取当前 Header 整块中仍可用于关键字补全的候选列表。
+			/// 已经在同一 Header 块内出现过的关键字不会重复出现在补全中。
+			/// </summary>
+			private List<string> GetAvailableHeaderKeywords(
+				ITextSnapshot snapshot,
+				int currentLineNumber,
+				string activeHeader,
+				List<string> allKeywords,
+				string currentInput)
+			{
+				HashSet<string> usedKeywords = GetUsedHeaderKeywords(snapshot, currentLineNumber, activeHeader);
+				usedKeywords.Remove(currentInput);
+
+				return allKeywords
+					.Where(keyword => !usedKeywords.Contains(keyword))
+					.ToList();
+			}
+
+			/// <summary>
+			/// 扫描当前所在的整个 Header 块，提取其中已经出现过的所有关键字。
+			/// </summary>
+			private HashSet<string> GetUsedHeaderKeywords(
+				ITextSnapshot snapshot,
+				int currentLineNumber,
+				string activeHeader)
+			{
+				HashSet<string> result = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+				Regex keywordRegex = new Regex(@"\.[a-zA-Z_][a-zA-Z0-9_]*", RegexOptions.Compiled);
+
+				if (!TryGetHeaderBlockRange(snapshot, currentLineNumber, activeHeader, out int startLine, out int endLine))
+				{
+					return result;
+				}
+
+				for (int lineNumber = startLine; lineNumber <= endLine; lineNumber++)
+				{
+					ITextSnapshotLine blockLine = snapshot.GetLineFromLineNumber(lineNumber);
+					string lineText = blockLine.GetText();
+					int commentIndex = lineText.IndexOf("//", StringComparison.Ordinal);
+					string codeText = commentIndex >= 0 ? lineText.Substring(0, commentIndex) : lineText;
+
+					foreach (Match keywordMatch in keywordRegex.Matches(codeText))
+					{
+						result.Add(keywordMatch.Value);
+					}
+				}
+
+				return result;
+			}
+
+			/// <summary>
+			/// 获取当前行所在的整个同类 Header 块范围。
+			/// </summary>
+			private bool TryGetHeaderBlockRange(
+				ITextSnapshot snapshot,
+				int currentLineNumber,
+				string activeHeader,
+				out int startLine,
+				out int endLine)
+			{
+				startLine = -1;
+				endLine = -1;
+
+				if (string.IsNullOrEmpty(activeHeader))
+				{
+					return false;
+				}
+
+				for (int i = currentLineNumber; i >= 0; i--)
+				{
+					ITextSnapshotLine blockLine = snapshot.GetLineFromLineNumber(i);
+					Match match = _headerRegex.Match(blockLine.GetText());
+					if (match.Success && string.Equals(match.Groups["header"].Value, activeHeader, StringComparison.OrdinalIgnoreCase))
+					{
+						startLine = i;
+						break;
+					}
+				}
+
+				if (startLine < 0)
+				{
+					return false;
+				}
+
+				endLine = snapshot.LineCount - 1;
+				for (int i = startLine + 1; i < snapshot.LineCount; i++)
+				{
+					ITextSnapshotLine blockLine = snapshot.GetLineFromLineNumber(i);
+					Match match = _headerRegex.Match(blockLine.GetText());
+					if (match.Success)
+					{
+						endLine = i - 1;
+						break;
+					}
+				}
+
+				return true;
 			}
 
 			/// <summary>
@@ -296,7 +397,7 @@ namespace For_the_Darkest_Dungeon.Completion
 
 				foreach (string keyword in ContinuousValueKeywords)
 				{
-					if (TryGetContinuousKeywordValueCompletionForOneKeyword(
+					if (TryGetContinuousValueCompletionForOneKeyword(
 							lineTextUntilCaret,
 							lineStartPosition,
 							curPos,
@@ -312,10 +413,7 @@ namespace For_the_Darkest_Dungeon.Completion
 				return false;
 			}
 
-			/// <summary>
-			/// 针对单个连续参数关键字执行补全计算。
-			/// </summary>
-			private bool TryGetContinuousKeywordValueCompletionForOneKeyword(
+			private bool TryGetContinuousValueCompletionForOneKeyword(
 				string lineTextUntilCaret,
 				int lineStartPosition,
 				int curPos,
