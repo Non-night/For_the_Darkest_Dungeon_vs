@@ -1623,22 +1623,27 @@ namespace For_the_Darkest_Dungeon.Error
 			bool canExKeyword = (keyword == ".damage_heal_base_class_ids" || keyword == ".incompatible_class_ids") ? true : false;
 			bool sugLessKeyword = (currentHeader == "spawn:" && keyword == ".effects") ? true : false;
 
-			// 参数数量检查：超过允许数量时报错。
+			// 参数数量检查：超过允许数量时，特判关键字只保留 warning，不再重复给出 error。
 			if (args.Count > maxArgs)
 			{
 				ParsedArgument firstExtraArg = args[maxArgs];
 
 				if (canExKeyword)
+				{
 					yield return CreateWarning(
 						snapshot,
 						firstExtraArg.StartPosition,
 						firstExtraArg.Length,
 						$"{currentHeader} 的 {keyword} 参数数量理论上不能超过 {maxArgs} 个，但是实际上似乎可以超出，此处仍然建议使用分行避免超量使用参数");
-				yield return CreateError(
-					snapshot,
-					firstExtraArg.StartPosition,
-					firstExtraArg.Length,
-					$"{currentHeader} 的 {keyword} 参数数量不能超过 {maxArgs} 个，当前数量为 {args.Count}");
+				}
+				else
+				{
+					yield return CreateError(
+						snapshot,
+						firstExtraArg.StartPosition,
+						firstExtraArg.Length,
+						$"{currentHeader} 的 {keyword} 参数数量不能超过 {maxArgs} 个，当前数量为 {args.Count}");
+				}
 			}
 
 			// spawn 特判
