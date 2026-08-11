@@ -768,7 +768,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { "activity_modifier:", new List<string> { ".override_valid_activity_ids", ".override_stress_removal_amount_low", ".override_stress_removal_amount_high" } },
             { "quirk_modifier:", new List<string> { ".incompatible_class_ids" } },
             { "act_out_display:", new List<string> { ".attack_friendly_anim", ".attack_friendly_fx", ".attack_friendly_targchestfx", ".attack_friendly_sfx" } },
-            { "restriction:", new List<string> { ".enabled_dlc" } },
+            { "restriction:", new List<string> { ".enabled_dlc" } }
         };
 
         // 3. 关键字与其对应的可选参数值映射 (Value)
@@ -871,7 +871,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // 单字符串长度32
 		public static readonly HashSet<(string Header, string Keyword)> SingleString32 = new HashSet<(string Header, string Keyword)>
 		{
-            ( "display_modifier:", ".anim_override" ), ( "mode:", ".id" ), ( "mode:", ".bark_override_id" ),
+            ( "display_modifier:", ".anim_override" ), ( "mode:", ".bark_override_id" ),
             ( "shape_shifter:", ".monster_class_ids" ), ( "death_class:", ".type" ), ( "incompatible_party_member:", ".id" ),
             ( "extra_battle_loot:", ".code" ), ( "extra_curio_loot:", ".code" ), ( "restriction:", ".enabled_dlc" )
 		};
@@ -940,7 +940,9 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             ("overstressed_modifier:", ".id"),
             // act_out
             ("act_out_display:", ".attack_friendly_anim"), ("act_out_display:", ".attack_friendly_fx"), ("act_out_display:", ".attack_friendly_targchestfx"),
-            ("act_out_display:", ".attack_friendly_sfx")
+            ("act_out_display:", ".attack_friendly_sfx"),
+            // mode 名相关关键字统一使用 64 作为错误上限，warning 阈值在错误检查器里单独处理为 32。
+            ("mode:", ".id")
         };
         // 单字符串长度128
         public static readonly HashSet<(string Header, string Keyword)> SingleString128 = new HashSet<(string Header, string Keyword)>
