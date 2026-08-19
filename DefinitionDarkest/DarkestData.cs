@@ -263,7 +263,6 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".clear_debuff", NumBoolValues },
             { ".clearvirtue", NumBoolValues },
             { ".cure_disease", NumBoolValues },
-            { ".daze", NumBoolValues },
             { ".undaze", NumBoolValues },
 
             // 字符布尔类
@@ -296,8 +295,8 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // 双布尔类关键字（用于报错检验）
         public static readonly HashSet<string> DoubleBoolKeywords = new HashSet<string>
         {
-			".set_monster_class_reset_hp"
-        };
+			".set_monster_class_reset_hp", ".refreshes_skill_uses"
+		};
 
         // 双布尔参数-报错检验用
         public static readonly List<string> DoubleBoolValuesForError = new List<string>
