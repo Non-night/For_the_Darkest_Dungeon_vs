@@ -70,15 +70,19 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             ".spawn_target_actor_base_class_id", ".clearvirtue", ".riposte_validate",
             ".buff_is_clear_debuff_valid", ".refreshes_skill_uses", ".cure_disease",
             ".individual_target_actor_rolls", ".damage_type", ".damage_source_type",
-            ".damage_source_data", ".daze", ".undaze"
-        };
+            ".damage_source_data", ".daze", ".undaze", ".is_trigger_effect", ".trigger_limit_minimum_increase",
+			".trigger_limit_maximum_increase", ".gain_random_quirk_positive_percentage", ".gain_random_quirk_negative",
+			".gain_random_trinket", ".gain_trinket", ".guaranteed_town_event", ".dotBurn", ".dot_irresistible",
+			".requires_burning_target", ".requires_not_burning_target", ".is_in_inventory", ".bonus_action_next_turn",
+			".cure_burn", ".controlled_burn_amount", ".controlled_burn_duration", ".requires_kill_target", ".destroy_trinket", ".can_apply_on_corpse"
+		};
 
         // 参数表
         // target 参数
         public static readonly List<string> TargetValues = new List<string>
         {
-            "performer", "performer_group", "performer_group_other", "target", "target_group", "target_group_other", "target_enemy_group", "global"
-        };
+            "performer", "performer_group", "performer_group_other", "target", "target_group", "target_group_other", "target_enemy_group", "global", "target_enemy_rank", "this_trinket", "target_enemy_random"
+		};
         // curio_result_type 参数
         public static readonly List<string> CurioResultValues = new List<string>
         {
@@ -87,7 +91,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // keyStatus 参数
         public static readonly List<string> KeyStatusValues = new List<string>
         {
-            "tagged", "poisoned", "bleeding", "stunned", "dazed"
+            "tagged", "poisoned", "bleeding", "stunned", "dazed", "burning"
         };
         // Buff Type 参数
         public static readonly List<string> BuffTypeValues = new List<string>
@@ -118,8 +122,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             "random_target_friendly_chance", "random_target_attack_chance",
             "transfer_debuff_from_attacker_chance", "transfer_buff_from_attacker_chance",
             "quirk_tag_evolution_duration", "deathblow_chance", "heartattack_stress_heal_percent",
-            "ignore_guard", "buff_duration_percent", "riposte_duration_percent"
-        };
+            "ignore_guard", "buff_duration_percent", "riposte_duration_percent",
+            "hp_dot_burn", "hp_dot_burn_decay_percent", "hp_dot_burn_amount_percent",
+            "hp_dot_burn_amount_received_percent", "wildfire_apply_adjacent_targets", "cure_burn_chance", "cure_burn_received_chance"
+
+		};
         // Buff Sub Type 参数
         public static readonly List<string> BuffSubTypeValues = new List<string>
         {
@@ -264,6 +271,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".clearvirtue", NumBoolValues },
             { ".cure_disease", NumBoolValues },
             { ".undaze", NumBoolValues },
+            { ".cure_burn", NumBoolValues },
 
             // 字符布尔类
             { ".on_hit", StrBoolValues },
@@ -289,7 +297,18 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".summon_can_spawn_loot", StrBoolValues },
             { ".set_monster_class_reset_hp", StrBoolValues },
             { ".summon_erase_data_on_roll", StrBoolValues },
-            { ".summon_rank_is_previous_monster_class", StrBoolValues }
+            { ".summon_rank_is_previous_monster_class", StrBoolValues },
+            { ".is_trigger_effect", StrBoolValues },
+            { ".gain_random_quirk_negative", StrBoolValues },
+            { ".guaranteed_town_event", StrBoolValues },
+            { ".dot_irresistible", StrBoolValues },
+            { ".requires_burning_target", StrBoolValues },
+            { ".requires_not_burning_target", StrBoolValues },
+            { ".is_in_inventory", StrBoolValues },
+            { ".bonus_action_next_turn", StrBoolValues },
+            { ".requires_kill_target", StrBoolValues },
+            { ".destroy_trinket", StrBoolValues },
+            { ".can_apply_on_corpse", StrBoolValues }
         };
 
         // 双布尔类关键字（用于报错检验）
@@ -477,12 +496,15 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".custom_idle_anim_name",
                 ".custom_idle_round_duration",
                 ".can_display_skill_name",
-                ".can_display_performer_selection_after_turn"
-            } },
+                ".can_display_performer_selection_after_turn",
+				".requires_burning",
+				".dmg_per_burn_stack",
+				".copy_burn_behind"
+			} },
             { "rendering:", new List<string> { ".sort_position_z_rank_override" } },
             { "controlled:", new List<string> { ".target_rank" } },
             { "health_bar:", new List<string> { ".type" } },
-            { "mode:", new List<string> { ".id", ".is_raid_default", ".bark_override_id", ".stress_damage_per_turn", ".battle_complete_combat_skill_id", ".affliction_combat_skill_id", ".always_guard_actor_base_class_ids", ".is_targetable", ".keep_rounds_in_ranks" } },
+            { "mode:", new List<string> { ".id", ".is_raid_default", ".bark_override_id", ".stress_damage_per_turn", ".battle_complete_combat_skill_id", ".affliction_combat_skill_id", ".always_guard_actor_base_class_ids", ".is_targetable", ".keep_rounds_in_ranks", ".battle_start_effect_ids" } },
             { "hp_reaction:", new List<string> { ".hp_ratio", ".is_under", ".effects" } },
             { "death_reaction:", new List<string> { ".target_allies", ".target_enemies", ".effects" } },
             { "crit:", new List<string> { ".effects", ".is_valid_effects_target" } },
@@ -557,8 +579,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".custom_idle_anim_name",
                 ".custom_idle_round_duration",
                 ".can_display_skill_name",
-                ".can_display_performer_selection_after_turn"
-            } },
+                ".can_display_performer_selection_after_turn",
+				".requires_burning",
+				".dmg_per_burn_stack",
+				".copy_burn_behind"
+			} },
             { "death_damage:", new List<string> { ".target_base_class_id", ".target_damage" } },
             { "personality:", new List<string> { ".prefskill" } },
             { "loot:", new List<string> { ".code", ".count", ".raid_finish_quirk_class_id" } },
@@ -592,8 +617,8 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".monster_class_id", ".random_monster_class_ids", ".random_monster_class_chances",
                 ".use_previous_monster_hp", ".is_valid_on_bleed_dot", ".is_valid_on_blight_dot",
                 ".is_valid_on_crit", ".reset_scale_anim", ".on_change_sfx", ".type", ".can_die_from_damage",
-                ".carry_over_hp_min_percent", ".clear_monster_brain_cooldowns", ".change_class_effects"
-            } },
+                ".carry_over_hp_min_percent", ".clear_monster_brain_cooldowns", ".change_class_effects", ".is_valid_on_burn_dot"
+			} },
             { "life_time:", new List<string> { ".alive_round_limit", ".does_check_for_loot" } },
             { "controller:", new List<string> { ".stress_per_controlled_turn", ".uncontrol_effects" } },
             { "battle_stage:", new List<string> { ".id" } },
@@ -678,8 +703,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".custom_idle_anim_name",
                 ".custom_idle_round_duration",
                 ".can_display_skill_name",
-                ".can_display_performer_selection_after_turn"
-            } },
+                ".can_display_performer_selection_after_turn",
+				".requires_burning",
+				".dmg_per_burn_stack",
+				".copy_burn_behind"
+			} },
             { "combat_move_skill:", new List<string> {
                 ".id",
                 ".dmg",
@@ -745,8 +773,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".custom_idle_anim_name",
                 ".custom_idle_round_duration",
                 ".can_display_skill_name",
-                ".can_display_performer_selection_after_turn"
-            } },
+                ".can_display_performer_selection_after_turn",
+				".requires_burning",
+				".dmg_per_burn_stack",
+				".copy_burn_behind"
+			} },
             { "id_index:", new List<string> { ".index"} },
             { "sorting_index:", new List<string> { ".index"} },
             { "generation:", new List<string> {
@@ -862,7 +893,8 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".nil", ".generation_guaranteed", ".condensed_tooltip_type",
                 ".condensed_tooltip_stats", ".condensed_tooltip_effects", ".is_generation_enabled",
                 ".can_select_combat_skills", ".has_caretaker_goals", ".self_target_valid",
-            };
+				".requires_burning", ".copy_burn_behind", ".is_valid_on_burn_dot"
+			};
             return boolKeys.Contains(keyword);
         }
 
@@ -963,7 +995,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             {("combat_skill:", ".effect"), (8, 64) }, {("combat_skill:", ".valid_modes"), (4, 64)}, {("combat_skill:", ".damage_heal_base_class_ids"), (4, 64)},
             {("combat_move_skill:", ".effect"), (8, 64) }, {("combat_move_skill:", ".valid_modes"), (4, 64)}, {("combat_move_skill:", ".damage_heal_base_class_ids"), (4, 64)},
             // 模式
-            {("mode:", ".always_guard_actor_base_class_ids"), (4, 64) },
+            {("mode:", ".always_guard_actor_base_class_ids"), (4, 64) },{("mode:", ".battle_start_effect_ids"), (8, 64) },
             // 生命反馈
             {("hp_reaction:", ".effects"), (4, 64) },
             // 死亡反馈
