@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -48,33 +48,38 @@ namespace For_the_Darkest_Dungeon.Completion
 			if (string.IsNullOrWhiteSpace(input))
 				return source.ToList();
 
-			// 先做普通前缀匹配。正常输入 .h / .heal 时最快。
-			List<string> prefixMatches = new List<string>();
-
-			foreach (string item in source)
-			{
-				if (item.StartsWith(input, StringComparison.OrdinalIgnoreCase))
-					prefixMatches.Add(item);
-			}
-
-			if (prefixMatches.Count > 0)
-				return prefixMatches;
-
-			// 前缀完全没有结果时，才进入模糊匹配。
 			string normalizedInput = FuzzyCandidate.Normalize(input);
 			if (normalizedInput.Length == 0)
 				return source.ToList();
 
+			List<string> prefixMatches = new List<string>();
 			List<FuzzyCandidate> candidates = GetOrCreateCandidates(source);
 			List<string> fuzzyMatches = new List<string>();
+			HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+			// 为了避免输入中间态时补全列表突然消失，这里同时计算前缀匹配和模糊匹配。
+			// 返回结果时仍然优先前缀命中，但不会把后续仍然合理的模糊命中直接丢掉。
+			foreach (string item in source)
+			{
+				if (item.StartsWith(input, StringComparison.OrdinalIgnoreCase) && seen.Add(item))
+				{
+					prefixMatches.Add(item);
+				}
+			}
 
 			foreach (FuzzyCandidate candidate in candidates)
 			{
-				if (IsFuzzyMatchNormalized(candidate.Normalized, normalizedInput))
+				if (IsFuzzyMatchNormalized(candidate.Normalized, normalizedInput) && seen.Add(candidate.Text))
+				{
 					fuzzyMatches.Add(candidate.Text);
+				}
 			}
 
-			return fuzzyMatches;
+			if (prefixMatches.Count == 0)
+				return fuzzyMatches;
+
+			prefixMatches.AddRange(fuzzyMatches);
+			return prefixMatches;
 		}
 
 		private static List<FuzzyCandidate> GetOrCreateCandidates(IReadOnlyList<string> source)

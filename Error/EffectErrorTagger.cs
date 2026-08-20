@@ -32,6 +32,16 @@ namespace For_the_Darkest_Dungeon.Error
 			".dotShuffle"
 		};
 
+		// 以下关键字只对当前 effect 的 this_trinket 目标有意义。
+		private static readonly string[] TrinketTargetKeywords = new[]
+		{
+			".trigger_limit_minimum_increase",
+			".trigger_limit_maximum_increase",
+			".gain_random_trinket",
+			".gain_trinket",
+			".destroy_trinket"
+		};
+
 		internal EffectErrorTagger(ITextBuffer buffer)
         {
             _buffer = buffer;
@@ -176,6 +186,40 @@ namespace For_the_Darkest_Dungeon.Error
 
 			return false;
 		}
+
+		/// <summary>
+		/// 从同一条 effect 语句中提取指定关键字的第一个参数。
+		/// 只检查当前行，避免把其他 effect 的 target 误认为当前 effect 的 target。
+		/// </summary>
+		private bool TryGetKeywordParameterValue(
+			string lineText,
+			string keyword,
+			List<Span> stringSpans,
+			out string actualValue)
+		{
+			actualValue = null;
+
+			foreach (RegexMatch keywordMatch in _keywordRegex.Matches(lineText))
+			{
+				if (!string.Equals(keywordMatch.Value, keyword, StringComparison.Ordinal))
+					continue;
+
+				// 忽略字符串内部和数字小数中的伪关键字。
+				if (stringSpans.Any(s => s.Contains(keywordMatch.Index)) ||
+					(keywordMatch.Index > 0 && char.IsDigit(lineText[keywordMatch.Index - 1])))
+					continue;
+
+				RegexMatch paramMatch = _nextParamRegex.Match(lineText.Substring(keywordMatch.Index + keywordMatch.Length));
+				if (!paramMatch.Success)
+					return false;
+
+				actualValue = paramMatch.Groups[1].Success ? paramMatch.Groups[1].Value : paramMatch.Groups[2].Value;
+				return true;
+			}
+
+			return false;
+		}
+
 		/// <summary>
 		/// 获取包含指定行号的整个 effect 块文本范围。
 		/// 向前会一直扫描到 effect: 或文件开头，向后会一直扫描到下一个 effect: 或文件末尾。
@@ -740,6 +784,20 @@ namespace For_the_Darkest_Dungeon.Error
                             continue;
                         }
 
+						if (TrinketTargetKeywords.Contains(keyword))
+						{
+							// 这些关键字要求同一条 effect 语句中的 .target 参数为 this_trinket。
+							if (!TryGetKeywordParameterValue(codeText, ".target", stringSpans, out string targetValue) ||
+								!string.Equals(targetValue, "this_trinket", StringComparison.Ordinal))
+							{
+								yield return new TagSpan<IErrorTag>(
+									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+									new ErrorTag(
+										PredefinedErrorTypeNames.Warning,
+										$"{keyword} 要求同一条 effect 的 .target 参数为 this_trinket"));
+							}
+						}
+
 						if (keyword == ".name")
 						{
 							if (TryGetNameValueInfo(
@@ -785,6 +843,20 @@ namespace For_the_Darkest_Dungeon.Error
 									}
 								}
 							}
+						}
+
+						if ((keyword == ".cure" && HasLaterKeyword(codeText, match.Index, ".cure_burn", stringSpans)) ||
+							(keyword == ".cure_burn" && HasLaterKeyword(codeText, match.Index, ".cure", stringSpans)))
+						{
+							// 两个关键字同时出现时，后写的生效，因此只标记当前这个较早的关键字。
+							string otherCureKeyword = keyword == ".cure" ? ".cure_burn" : ".cure";
+							yield return new TagSpan<IErrorTag>(
+								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+								new ErrorTag(
+									PredefinedErrorTypeNames.SyntaxError,
+									$"{keyword} 与 {otherCureKeyword} 同行时，写在后面的关键字生效，当前关键字不生效"));
+
+							continue;
 						}
 
 						if (keyword == ".heal" &&

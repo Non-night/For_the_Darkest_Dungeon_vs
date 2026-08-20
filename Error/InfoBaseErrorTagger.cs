@@ -1501,6 +1501,40 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
+		/// 获取 mode 名相关关键字的自定义长度阈值。
+		/// 规则统一为：长度大于 32 字符时 warning，超过 64 字符时 Error。
+		/// </summary>
+		private bool TryGetModeNameLengthThresholds(
+			string currentHeader,
+			string keyword,
+			out int warningLength,
+			out int errorLength)
+		{
+			warningLength = 32;
+			errorLength = 64;
+
+			// mode: .id 的参数本身就是 mode 名，需要使用统一的新阈值规则。
+			if (currentHeader == "mode:" && keyword == ".id")
+			{
+				return true;
+			}
+
+			// 技能里的 .valid_modes 参数也是 mode 名列表，同样使用统一的新阈值规则。
+			if ((currentHeader == "skill:" ||
+				 currentHeader == "riposte_skill:" ||
+				 currentHeader == "combat_skill:" ||
+				 currentHeader == "combat_move_skill:") &&
+				keyword == ".valid_modes")
+			{
+				return true;
+			}
+
+			warningLength = 0;
+			errorLength = 0;
+			return false;
+		}
+
+		/// <summary>
 		/// 检查当前 Header + Keyword 是否属于多字符串参数长度限制表。
 		/// </summary>
 		private bool TryGetMultiStringLengthRule(
@@ -1584,7 +1618,27 @@ namespace For_the_Darkest_Dungeon.Error
 			// 这里排除空白字符，避免 "abc def" 被长度计算成包含空格。
 			int actualLength = arg.Value.Count(c => !char.IsWhiteSpace(c));
 
-			if (actualLength == maxLength)
+			if (TryGetModeNameLengthThresholds(currentHeader, keyword, out int warningLength, out int errorLength))
+			{
+				// mode 名相关关键字使用双阈值：大于 32 字符 warning，超过 64 字符 Error。
+				if (actualLength > errorLength)
+				{
+					yield return CreateError(
+						snapshot,
+						arg.StartPosition,
+						arg.Length,
+						$"{currentHeader} 的 {keyword} 参数 '{arg.Value}' 长度不能超过 {errorLength} 个字符，当前长度为 {actualLength}");
+				}
+				else if (actualLength > warningLength)
+				{
+					yield return CreateWarning(
+						snapshot,
+						arg.StartPosition,
+						arg.Length,
+						$"{currentHeader} 的 {keyword} 参数 '{arg.Value}' 长度已经超过 {warningLength} 个字符，当前长度为 {actualLength}，建议缩短");
+				}
+			}
+			else if (actualLength == maxLength)
 			{
 				yield return CreateWarning(
 					snapshot,
@@ -1623,22 +1677,27 @@ namespace For_the_Darkest_Dungeon.Error
 			bool canExKeyword = (keyword == ".damage_heal_base_class_ids" || keyword == ".incompatible_class_ids") ? true : false;
 			bool sugLessKeyword = (currentHeader == "spawn:" && keyword == ".effects") ? true : false;
 
-			// 参数数量检查：超过允许数量时报错。
+			// 参数数量检查：超过允许数量时，特判关键字只保留 warning，不再重复给出 error。
 			if (args.Count > maxArgs)
 			{
 				ParsedArgument firstExtraArg = args[maxArgs];
 
 				if (canExKeyword)
+				{
 					yield return CreateWarning(
 						snapshot,
 						firstExtraArg.StartPosition,
 						firstExtraArg.Length,
 						$"{currentHeader} 的 {keyword} 参数数量理论上不能超过 {maxArgs} 个，但是实际上似乎可以超出，此处仍然建议使用分行避免超量使用参数");
-				yield return CreateError(
-					snapshot,
-					firstExtraArg.StartPosition,
-					firstExtraArg.Length,
-					$"{currentHeader} 的 {keyword} 参数数量不能超过 {maxArgs} 个，当前数量为 {args.Count}");
+				}
+				else
+				{
+					yield return CreateError(
+						snapshot,
+						firstExtraArg.StartPosition,
+						firstExtraArg.Length,
+						$"{currentHeader} 的 {keyword} 参数数量不能超过 {maxArgs} 个，当前数量为 {args.Count}");
+				}
 			}
 
 			// spawn 特判
@@ -1658,7 +1717,27 @@ namespace For_the_Darkest_Dungeon.Error
 			{
 				int actualLength = arg.Value.Count(c => !char.IsWhiteSpace(c));
 
-				if (actualLength == maxLength)
+				if (TryGetModeNameLengthThresholds(currentHeader, keyword, out int warningLength, out int errorLength))
+				{
+					// mode 名相关关键字使用双阈值：大于 32 字符 warning，超过 64 字符 Error。
+					if (actualLength > errorLength)
+					{
+						yield return CreateError(
+							snapshot,
+							arg.StartPosition,
+							arg.Length,
+							$"{currentHeader} 的 {keyword} 参数 '{arg.Value}' 长度不能超过 {errorLength} 个字符，当前长度为 {actualLength}");
+					}
+					else if (actualLength > warningLength)
+					{
+						yield return CreateWarning(
+							snapshot,
+							arg.StartPosition,
+							arg.Length,
+							$"{currentHeader} 的 {keyword} 参数 '{arg.Value}' 长度已经超过 {warningLength} 个字符，当前长度为 {actualLength}，建议缩短");
+					}
+				}
+				else if (actualLength == maxLength)
 				{
 					yield return CreateWarning(
 						snapshot,

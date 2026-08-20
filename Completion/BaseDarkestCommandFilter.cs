@@ -187,8 +187,9 @@ namespace For_the_Darkest_Dungeon.Completion
 					}
 					else
 					{
-						FilterActiveSession();
-						ForceSelectCompletion();
+						// 对自定义 fuzzy 补全来说，直接重建会话比调用 VS 默认 Filter 更稳定，
+						// 可以避免某些中间输入态被默认过滤规则提前清空。
+						TriggerCompletion();
 					}
 				}
 
