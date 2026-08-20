@@ -182,7 +182,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             "poisoned", "captor", "ddexit", "townexit", "death", "heartattack",
             "theblood", "effect", "quirkevolutiondeath", "reflect", "riposte",
             "additionaleffect", "supply", "quest_item", "trinket",  "estate_currency",
-            "journal_page", "torch", "shovel"
+            "journal_page", "torch", "shovel", "burn"
         };
         // Damage Source 参数
         public static readonly List<string> DamageSourceValues = new List<string>
