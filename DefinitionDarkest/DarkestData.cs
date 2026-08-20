@@ -194,12 +194,12 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // 数字布尔参数
         public static readonly List<string> NumBoolValues = new List<string>
         {
-            "0", "1"
+            "1", "0"
         };
         // 字符布尔参数
         public static readonly List<string> StrBoolValues = new List<string>
         {
-            "false", "true"
+            "true", "false"
         };
         // 字符布尔参数-报错检验用
         public static readonly List<string> StrBoolValuesForError = new List<string>
