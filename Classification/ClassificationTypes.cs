@@ -154,6 +154,24 @@ namespace For_the_Darkest_Dungeon.Classification
                 IsBold = false;
             }
         }
+        // 灼烧
+        [Export(typeof(ClassificationTypeDefinition))]
+        [Name("darkest.effects.keyword.burn")]
+        internal static ClassificationTypeDefinition DarkestBurnKeyword;
+
+        [Export(typeof(EditorFormatDefinition))]
+        [ClassificationType(ClassificationTypeNames = "darkest.effects.keyword.burn")]
+        [Name("darkest.effects.keyword.burn")]
+        [UserVisible(true)]
+        internal class DarkestBurnKeywordFormat : ClassificationFormatDefinition
+        {
+            public DarkestBurnKeywordFormat()
+            {
+                DisplayName = "Darkest Burn Keyword (.burn)";
+                ForegroundColor = Color.FromRgb(0xff, 0x6a, 0x00);
+                IsBold = false;
+            }
+        }
         // 治疗
         [Export(typeof(ClassificationTypeDefinition))]
         [Name("darkest.effects.keyword.heal")]
