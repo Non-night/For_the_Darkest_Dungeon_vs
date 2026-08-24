@@ -29,7 +29,8 @@ namespace For_the_Darkest_Dungeon.Error
 			".dotPoison",
 			".dotStress",
 			".dotHpHeal",
-			".dotShuffle"
+			".dotShuffle",
+			".dotBurn"
 		};
 
 		// 以下关键字只对当前 effect 的 this_trinket 目标有意义。
@@ -1298,14 +1299,14 @@ namespace For_the_Darkest_Dungeon.Error
 							}
                             var remainingText = codeText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
-                            if (paramMatch.Success)
-                            {
-                                string valInQuote = paramMatch.Groups[1].Value;
-                                string valPlain = paramMatch.Groups[2].Value;
-                                bool isQuoted = paramMatch.Groups[1].Success || paramMatch.Value.Contains("\"\"");
-                                string actualValue = isQuoted ? valInQuote : valPlain;
+							if (paramMatch.Success)
+							{
+								string valInQuote = paramMatch.Groups[1].Value;
+								string valPlain = paramMatch.Groups[2].Value;
+								bool isQuoted = paramMatch.Groups[1].Success || paramMatch.Value.Contains("\"\"");
+								string actualValue = isQuoted ? valInQuote : valPlain;
 
-                                bool isParamValid = validValues.Contains(actualValue);
+								bool isParamValid = validValues.Contains(actualValue);
 								bool isInvalidParamAllowed = false;
 
 								// 计算参数值在原始行中的范围，供特殊警告精确标记到参数本身使用。
@@ -1356,7 +1357,9 @@ namespace For_the_Darkest_Dungeon.Error
 										actualValue == "hp_dot_poison" ||
 										actualValue == "hp_dot_heal" ||
 										actualValue == "stress_dot" ||
-										actualValue == "shuffle_dot";
+										actualValue == "shuffle_dot" ||
+										actualValue == "tag" ||
+										actualValue == "stealth";
 
 									if (!isAllowedStealBuffStatType)
 									{
