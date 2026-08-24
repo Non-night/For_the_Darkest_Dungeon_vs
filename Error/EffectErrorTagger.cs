@@ -787,9 +787,21 @@ namespace For_the_Darkest_Dungeon.Error
 
 						if (TrinketTargetKeywords.Contains(keyword))
 						{
-							// 这些关键字要求同一条 effect 语句中的 .target 参数为 this_trinket。
-							if (!TryGetKeywordParameterValue(codeText, ".target", stringSpans, out string targetValue) ||
-								!string.Equals(targetValue, "this_trinket", StringComparison.Ordinal))
+							// .destroy_trinket 只有参数为 true（忽略大小写）时才需要检查目标。
+							bool requiresThisTrinketTarget = keyword != ".destroy_trinket";
+							if (!requiresThisTrinketTarget &&
+								TryGetKeywordParameterValue(codeText, keyword, stringSpans, out string destroyTrinketValue))
+							{
+								requiresThisTrinketTarget = string.Equals(
+									destroyTrinketValue,
+									"true",
+									StringComparison.OrdinalIgnoreCase);
+							}
+
+							// 满足检查条件时，同一条 effect 语句中的 .target 参数必须为 this_trinket。
+							if (requiresThisTrinketTarget &&
+								(!TryGetKeywordParameterValue(codeText, ".target", stringSpans, out string targetValue) ||
+								 !string.Equals(targetValue, "this_trinket", StringComparison.Ordinal)))
 							{
 								yield return new TagSpan<IErrorTag>(
 									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
