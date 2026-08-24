@@ -182,7 +182,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             "poisoned", "captor", "ddexit", "townexit", "death", "heartattack",
             "theblood", "effect", "quirkevolutiondeath", "reflect", "riposte",
             "additionaleffect", "supply", "quest_item", "trinket",  "estate_currency",
-            "journal_page", "torch", "shovel"
+            "journal_page", "torch", "shovel", "burn"
         };
         // Damage Source 参数
         public static readonly List<string> DamageSourceValues = new List<string>
@@ -194,12 +194,12 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // 数字布尔参数
         public static readonly List<string> NumBoolValues = new List<string>
         {
-            "0", "1"
+            "1", "0"
         };
         // 字符布尔参数
         public static readonly List<string> StrBoolValues = new List<string>
         {
-            "false", "true"
+            "true", "false"
         };
         // 字符布尔参数-报错检验用
         public static readonly List<string> StrBoolValuesForError = new List<string>

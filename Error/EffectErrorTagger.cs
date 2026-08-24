@@ -29,7 +29,8 @@ namespace For_the_Darkest_Dungeon.Error
 			".dotPoison",
 			".dotStress",
 			".dotHpHeal",
-			".dotShuffle"
+			".dotShuffle",
+			".dotBurn"
 		};
 
 		// 以下关键字只对当前 effect 的 this_trinket 目标有意义。
@@ -786,9 +787,21 @@ namespace For_the_Darkest_Dungeon.Error
 
 						if (TrinketTargetKeywords.Contains(keyword))
 						{
-							// 这些关键字要求同一条 effect 语句中的 .target 参数为 this_trinket。
-							if (!TryGetKeywordParameterValue(codeText, ".target", stringSpans, out string targetValue) ||
-								!string.Equals(targetValue, "this_trinket", StringComparison.Ordinal))
+							// .destroy_trinket 只有参数为 true（忽略大小写）时才需要检查目标。
+							bool requiresThisTrinketTarget = keyword != ".destroy_trinket";
+							if (!requiresThisTrinketTarget &&
+								TryGetKeywordParameterValue(codeText, keyword, stringSpans, out string destroyTrinketValue))
+							{
+								requiresThisTrinketTarget = string.Equals(
+									destroyTrinketValue,
+									"true",
+									StringComparison.OrdinalIgnoreCase);
+							}
+
+							// 满足检查条件时，同一条 effect 语句中的 .target 参数必须为 this_trinket。
+							if (requiresThisTrinketTarget &&
+								(!TryGetKeywordParameterValue(codeText, ".target", stringSpans, out string targetValue) ||
+								 !string.Equals(targetValue, "this_trinket", StringComparison.Ordinal)))
 							{
 								yield return new TagSpan<IErrorTag>(
 									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
@@ -1298,14 +1311,14 @@ namespace For_the_Darkest_Dungeon.Error
 							}
                             var remainingText = codeText.Substring(match.Index + match.Length);
                             var paramMatch = _nextParamRegex.Match(remainingText);
-                            if (paramMatch.Success)
-                            {
-                                string valInQuote = paramMatch.Groups[1].Value;
-                                string valPlain = paramMatch.Groups[2].Value;
-                                bool isQuoted = paramMatch.Groups[1].Success || paramMatch.Value.Contains("\"\"");
-                                string actualValue = isQuoted ? valInQuote : valPlain;
+							if (paramMatch.Success)
+							{
+								string valInQuote = paramMatch.Groups[1].Value;
+								string valPlain = paramMatch.Groups[2].Value;
+								bool isQuoted = paramMatch.Groups[1].Success || paramMatch.Value.Contains("\"\"");
+								string actualValue = isQuoted ? valInQuote : valPlain;
 
-                                bool isParamValid = validValues.Contains(actualValue);
+								bool isParamValid = validValues.Contains(actualValue);
 								bool isInvalidParamAllowed = false;
 
 								// 计算参数值在原始行中的范围，供特殊警告精确标记到参数本身使用。
@@ -1356,7 +1369,9 @@ namespace For_the_Darkest_Dungeon.Error
 										actualValue == "hp_dot_poison" ||
 										actualValue == "hp_dot_heal" ||
 										actualValue == "stress_dot" ||
-										actualValue == "shuffle_dot";
+										actualValue == "shuffle_dot" ||
+										actualValue == "tag" ||
+										actualValue == "stealth";
 
 									if (!isAllowedStealBuffStatType)
 									{

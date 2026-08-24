@@ -96,6 +96,8 @@ namespace For_the_Darkest_Dungeon.Classification
 					type = _registry.GetClassificationType("darkest.effects.keyword.poison");
 				else if (match.Value == ".dotHpHeal" || match.Value == ".heal" || match.Value == ".heal_percent")
 					type = _registry.GetClassificationType("darkest.effects.keyword.heal");
+				else if (match.Value == ".dotBurn")
+					type = _registry.GetClassificationType("darkest.effects.keyword.burn");
 				else if (match.Value == ".stun")
 					type = _registry.GetClassificationType("darkest.effects.keyword.stun");
 				else if (DarkestEffectsData.RiposteKeywords.Contains(keyword))
