@@ -1092,7 +1092,7 @@ namespace For_the_Darkest_Dungeon.Error
 							}
 						}
 
-						if (keyword == ".skill_instant")
+						if (keyword == ".skill_instant" || keyword == ".keyStatus" || keyword == ".monsterType")
 						{
 							var skillInstantParamMatch = _nextParamRegex.Match(codeText.Substring(match.Index + match.Length));
 							if (skillInstantParamMatch.Success)
@@ -1130,7 +1130,7 @@ namespace For_the_Darkest_Dungeon.Error
 
 									if (!hasTargetPerformerInSameEffect)
 									{
-										string errorMsg = ".skill_instant要求目标不能是target或target_enemy_group，否则在技能里会引起游戏崩溃或其他严重错误";
+										string errorMsg = ".skill_instant类效果要求目标不能是target或target_enemy_group，否则在技能里会引起游戏崩溃或其他严重错误";
 										var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
 										yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
 									}
