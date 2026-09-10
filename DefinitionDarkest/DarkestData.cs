@@ -182,7 +182,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             "poisoned", "captor", "ddexit", "townexit", "death", "heartattack",
             "theblood", "effect", "quirkevolutiondeath", "reflect", "riposte",
             "additionaleffect", "supply", "quest_item", "trinket",  "estate_currency",
-            "journal_page", "torch", "shovel"
+            "journal_page", "torch", "shovel", "burn"
         };
         // Damage Source 参数
         public static readonly List<string> DamageSourceValues = new List<string>
@@ -194,12 +194,12 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
         // 数字布尔参数
         public static readonly List<string> NumBoolValues = new List<string>
         {
-            "0", "1"
+            "1", "0"
         };
         // 字符布尔参数
         public static readonly List<string> StrBoolValues = new List<string>
         {
-            "false", "true"
+            "true", "false"
         };
         // 字符布尔参数-报错检验用
         public static readonly List<string> StrBoolValuesForError = new List<string>
@@ -819,7 +819,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             // 技能type
             { "SKILL_TYPE", new List<string> { "melee", "ranged", "move", "teleport" } },
 
-            // 表格中列出的 54 个弹出文本类型
+            // 表格中列出的 55 个弹出文本类型
             { ".disabled_popup_text_types", new List<string>
                 {
                     "actor_dot_complete", "pass", "hp_heal_dot_onset", "hp_heal_dot", "hp_heal_dot_crit",
@@ -827,7 +827,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                     "hero_heal", "hero_heal_crit", "monster_heal", "monster_heal_crit", "stress_reduce",
                     "stress_damage", "resist", "move_resist", "disease_resist", "buff", "debuff",
                     "debuff_resist", "stun", "stun_resist", "stun_clear", "poison", "poison_resist",
-                    "bleed", "bleed_resist", "cured", "cure_failed", "tagged", "guard", "guard_failed",
+                    "bleed", "bleed_resist", "burn", "cured", "cure_failed", "tagged", "guard", "guard_failed",
                     "riposte", "full", "heart_attack", "heal_failed", "vampire", "vampire_resist",
                     "stress_dot", "stress_dot_resist", "shuffle_dot", "shuffle_dot_resist",
                     "health_damage_block_onset", "health_damage_block", "tag_block", "damage_reflect",
