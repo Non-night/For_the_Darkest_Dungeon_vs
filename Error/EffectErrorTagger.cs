@@ -38,6 +38,7 @@ namespace For_the_Darkest_Dungeon.Error
 		{
 			".trigger_limit_minimum_increase",
 			".trigger_limit_maximum_increase",
+			".set_trigger_limit",
 			".gain_random_trinket",
 			".gain_trinket",
 			".destroy_trinket"
@@ -1094,50 +1095,65 @@ namespace For_the_Darkest_Dungeon.Error
 
 						if (keyword == ".skill_instant" || keyword == ".keyStatus" || keyword == ".monsterType")
 						{
-							var skillInstantParamMatch = _nextParamRegex.Match(codeText.Substring(match.Index + match.Length));
-							if (skillInstantParamMatch.Success)
+							bool shouldCheckTarget = keyword == ".keyStatus" || keyword == ".monsterType";
+
+							if (keyword == ".skill_instant")
 							{
-								string skillInstantQuotedValue = skillInstantParamMatch.Groups[1].Value;
-								string skillInstantPlainValue = skillInstantParamMatch.Groups[2].Value;
-								bool isSkillInstantQuoted = skillInstantParamMatch.Groups[1].Success || skillInstantParamMatch.Value.Contains("\"\"");
-								string skillInstantValue = isSkillInstantQuoted ? skillInstantQuotedValue : skillInstantPlainValue;
-
-								// 当 .skill_instant 的参数为 true 时，向前向后扫描所属整个 effect 块，并忽略每行 // 后的注释内容。
-								if (skillInstantValue == "true" && TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+								var skillInstantParamMatch = _nextParamRegex.Match(codeText.Substring(match.Index + match.Length));
+								if (skillInstantParamMatch.Success)
 								{
-									bool hasTargetPerformerInSameEffect = false;
+									string skillInstantQuotedValue = skillInstantParamMatch.Groups[1].Value;
+									string skillInstantPlainValue = skillInstantParamMatch.Groups[2].Value;
+									bool isSkillInstantQuoted = skillInstantParamMatch.Groups[1].Success || skillInstantParamMatch.Value.Contains("\"\"");
+									string skillInstantValue = isSkillInstantQuoted ? skillInstantQuotedValue : skillInstantPlainValue;
 
-									foreach (RegexMatch sameEffectMatch in _keywordRegex.Matches(effectBlockCodeText))
+									// 保持原有规则：只有 .skill_instant 的参数为小写 true 时才检查目标。
+									shouldCheckTarget = skillInstantValue == "true";
+								}
+							}
+
+							if (shouldCheckTarget && TryGetEffectBlockCodeRange(snapshot, i, out int blockStart, out int blockEnd, out string effectBlockCodeText))
+							{
+								bool hasForbiddenTarget = false;
+								bool hasTargetPerformerInSameEffect = false;
+
+								foreach (RegexMatch sameEffectMatch in _keywordRegex.Matches(effectBlockCodeText))
+								{
+									if (string.Equals(sameEffectMatch.Value, ".target", StringComparison.Ordinal))
 									{
-										if (string.Equals(sameEffectMatch.Value, ".target", StringComparison.Ordinal))
+										var targetParamMatch = _nextParamRegex.Match(effectBlockCodeText.Substring(sameEffectMatch.Index + sameEffectMatch.Length));
+										if (targetParamMatch.Success)
 										{
-											var targetParamMatch = _nextParamRegex.Match(effectBlockCodeText.Substring(sameEffectMatch.Index + sameEffectMatch.Length));
-											if (targetParamMatch.Success)
-											{
-												string targetQuotedValue = targetParamMatch.Groups[1].Value;
-												string targetPlainValue = targetParamMatch.Groups[2].Value;
-												bool isTargetQuoted = targetParamMatch.Groups[1].Success || targetParamMatch.Value.Contains("\"\"");
-												string targetValue = isTargetQuoted ? targetQuotedValue : targetPlainValue;
+											string targetQuotedValue = targetParamMatch.Groups[1].Value;
+											string targetPlainValue = targetParamMatch.Groups[2].Value;
+											bool isTargetQuoted = targetParamMatch.Groups[1].Success || targetParamMatch.Value.Contains("\"\"");
+											string targetValue = isTargetQuoted ? targetQuotedValue : targetPlainValue;
 
-												if (targetValue != "target" && targetValue != "target_enemy_group")
-												{
-													hasTargetPerformerInSameEffect = true;
-													break;
-												}
+											if (targetValue == "target" || targetValue == "target_enemy_group")
+											{
+												hasForbiddenTarget = true;
+											}
+											else
+											{
+												hasTargetPerformerInSameEffect = true;
 											}
 										}
 									}
+								}
 
-									if (!hasTargetPerformerInSameEffect)
-									{
-										string errorMsg = ".skill_instant类效果要求目标不能是target或target_enemy_group，否则在技能里会引起游戏崩溃或其他严重错误";
-										var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
-										yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
-									}
+								// .keyStatus/.monsterType 只在目标明确为 target 或 target_enemy_group 时报告。
+								bool shouldReportError = (keyword == ".keyStatus" || keyword == ".monsterType")
+									? hasForbiddenTarget
+									: !hasTargetPerformerInSameEffect;
+
+								if (shouldReportError)
+								{
+									string errorMsg = ".skill_instant类效果要求目标不能是target或target_enemy_group，否则在技能里会引起游戏崩溃或其他严重错误";
+									var errorSpan = new SnapshotSpan(line.Snapshot, line.Start + match.Index, match.Length);
+									yield return new TagSpan<IErrorTag>(errorSpan, new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
 								}
 							}
 						}
-
 						if (keyword == ".use_item_id")
 						{
 							// 当存在 .use_item_id 时，向前向后扫描所属整个 effect 块，并忽略每行 // 后的注释内容。
