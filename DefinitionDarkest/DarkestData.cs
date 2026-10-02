@@ -71,7 +71,7 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             ".buff_is_clear_debuff_valid", ".refreshes_skill_uses", ".cure_disease",
             ".individual_target_actor_rolls", ".damage_type", ".damage_source_type",
             ".damage_source_data", ".daze", ".undaze", ".is_trigger_effect", ".trigger_limit_minimum_increase",
-			".trigger_limit_maximum_increase", ".gain_random_quirk_positive_percentage", ".gain_random_quirk_negative",
+			".trigger_limit_maximum_increase", ".set_trigger_limit", ".gain_random_quirk_positive_percentage", ".gain_random_quirk_negative",
 			".gain_random_trinket", ".gain_trinket", ".guaranteed_town_event", ".dotBurn", ".dot_irresistible",
 			".requires_burning_target", ".requires_not_burning_target", ".is_in_inventory", ".bonus_action_next_turn",
 			".cure_burn", ".controlled_burn_amount", ".controlled_burn_duration", ".requires_kill_target", ".destroy_trinket", ".can_apply_on_corpse"

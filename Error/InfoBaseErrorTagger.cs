@@ -202,6 +202,45 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
+		/// 检查指定模式是否出现在当前 Header 块的 .valid_modes 参数中。
+		/// 只扫描当前 Header 到下一个 Header 之前的范围，避免跨 Header 误判。
+		/// </summary>
+		private bool HasValidModeForDynamicEffects(
+			ITextSnapshot snapshot,
+			int currentLineNumber,
+			string modeName)
+		{
+			int headerStartLine = FindHeaderStartLineAbove(snapshot, currentLineNumber);
+			if (headerStartLine < 0)
+				return false;
+
+			int headerEndLine = FindHeaderBlockEndLine(snapshot, headerStartLine, currentLineNumber);
+			for (int lineNumber = headerStartLine; lineNumber <= headerEndLine; lineNumber++)
+			{
+				ITextSnapshotLine line = snapshot.GetLineFromLineNumber(lineNumber);
+				string codeText = GetCodeTextBeforeComment(line.GetText());
+				List<Span> stringSpans = GetStringSpans(codeText);
+
+				foreach (RegexMatch validModesMatch in KeywordRegex.Matches(codeText))
+				{
+					if (!string.Equals(validModesMatch.Value, ".valid_modes", StringComparison.Ordinal) ||
+						stringSpans.Any(span => span.Contains(validModesMatch.Index)))
+						continue;
+
+					foreach (ParsedArgument argument in ParseArgumentsUntilNextKeywordAcrossLines(
+						snapshot,
+						line,
+						validModesMatch.Index + validModesMatch.Length))
+					{
+						if (string.Equals(argument.Value, modeName, StringComparison.Ordinal))
+							return true;
+					}
+				}
+			}
+
+			return false;
+		}
+		/// <summary>
 		/// 从指定行向上寻找最近的 Header 行。
 		///
 		/// 注意：
@@ -495,6 +534,20 @@ namespace For_the_Darkest_Dungeon.Error
 							isValid = false;
 						}
 
+						// 模式差分效果要求当前 Header 块中存在对应的可用模式定义。
+						if (isValid && keyword.EndsWith("_effects", StringComparison.Ordinal))
+						{
+							Match modeMatch = Regex.Match(keyword, @"^\.(?<mode>[^\s.]+)_effects$");
+							if (modeMatch.Success &&
+								!HasValidModeForDynamicEffects(snapshot, i, modeMatch.Groups["mode"].Value))
+							{
+								yield return new TagSpan<IErrorTag>(
+									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+									new ErrorTag(
+										PredefinedErrorTypeNames.SyntaxError,
+										"模式差分效果要求必须存在同行的可用模式定义"));
+							}
+						}
 						// 5. 关键字本身合法时，再检查其参数。
 						if (isValid && isDefinedInCurrentHeader)
 						{
