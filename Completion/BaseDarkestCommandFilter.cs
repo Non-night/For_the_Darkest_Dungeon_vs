@@ -127,6 +127,18 @@ namespace For_the_Darkest_Dungeon.Completion
 			{
 				HandleDotChar(snapshot, line, caretPos);
 			}
+			else if (typedChar == '"')
+			{
+				// 输入左引号后，允许子类按当前关键字触发参数补全；闭合引号只保留默认过滤行为。
+				if (ShouldTriggerCompletionOnQuote(lineText, trimmedText))
+				{
+					TriggerCompletion();
+				}
+				else if (HasActiveSession())
+				{
+					_currentSession.Filter();
+				}
+			}
 			else if (typedChar == ' ')
 			{
 				if (ShouldTriggerCompletionOnSpace(lineText, trimmedText))
@@ -206,6 +218,15 @@ namespace For_the_Darkest_Dungeon.Completion
 		protected virtual bool ShouldTriggerHeaderCompletion(char typedChar, string lineText)
 		{
 			return typedChar == ':' && SupportsHeaderCompletion;
+		}
+
+		/// <summary>
+		/// 判断输入左引号后是否应触发静态参数补全。
+		/// 默认不触发，由 Effect 和 Info 类过滤器按自身数据表覆写。
+		/// </summary>
+		protected virtual bool ShouldTriggerCompletionOnQuote(string lineText, string trimmedText)
+		{
+			return false;
 		}
 
 		/// <summary>

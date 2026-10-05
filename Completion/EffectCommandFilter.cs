@@ -2,6 +2,7 @@
 using Microsoft.VisualStudio.Language.Intellisense;
 using Microsoft.VisualStudio.Text;
 using Microsoft.VisualStudio.Text.Editor;
+using System;
 using System.Linq;
 
 namespace For_the_Darkest_Dungeon.Completion
@@ -25,6 +26,27 @@ namespace For_the_Darkest_Dungeon.Completion
 		protected override bool ShouldTriggerCompletionOnSpace(string lineText, string trimmedText)
 		{
 			return DarkestEffectsData.KeywordToValuesMap.Keys.Any(keyword => trimmedText.EndsWith(keyword));
+		}
+
+		/// <summary>
+		/// 输入未闭合左引号后，若前一个 token 是支持静态值补全的 Effect 关键字，则触发补全。
+		/// </summary>
+		protected override bool ShouldTriggerCompletionOnQuote(string lineText, string trimmedText)
+		{
+			if (string.IsNullOrEmpty(lineText) || lineText[lineText.Length - 1] != '"')
+			{
+				return false;
+			}
+
+			// 引号数量为奇数表示刚输入的是左引号，偶数表示已经闭合。
+			if (lineText.Count(character => character == '"') % 2 == 0)
+			{
+				return false;
+			}
+
+			string beforeQuote = lineText.Substring(0, lineText.Length - 1).TrimEnd();
+			return DarkestEffectsData.KeywordToValuesMap.Keys.Any(keyword =>
+				beforeQuote.EndsWith(keyword, StringComparison.OrdinalIgnoreCase));
 		}
 
 		/// <summary>
