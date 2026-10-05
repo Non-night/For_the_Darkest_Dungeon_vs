@@ -57,6 +57,31 @@ namespace For_the_Darkest_Dungeon.Completion
 		}
 
 		/// <summary>
+		/// 输入未闭合左引号后，若前一个 token 支持静态值补全，则触发补全。
+		/// </summary>
+		protected override bool ShouldTriggerCompletionOnQuote(string lineText, string trimmedText)
+		{
+			if (string.IsNullOrEmpty(lineText) || lineText[lineText.Length - 1] != '"')
+			{
+				return false;
+			}
+
+			// 引号数量为奇数表示刚输入的是左引号，偶数表示已经闭合。
+			if (lineText.Count(character => character == '"') % 2 == 0)
+			{
+				return false;
+			}
+
+			string beforeQuote = lineText.Substring(0, lineText.Length - 1).TrimEnd();
+			string previousToken = beforeQuote
+				.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+				.LastOrDefault();
+
+			return !string.IsNullOrEmpty(previousToken)
+				&& DarkestInfoData.IsKeywordHasStaticValues(previousToken);
+		}
+
+		/// <summary>
 		/// 对于 Info / Art / Override：
 		/// 1. 如果处于连续参数补全上下文，则重新触发补全；
 		/// 2. 否则若补全窗口已存在，则仅执行默认过滤。

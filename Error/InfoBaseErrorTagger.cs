@@ -202,6 +202,45 @@ namespace For_the_Darkest_Dungeon.Error
 		}
 
 		/// <summary>
+		/// 检查指定模式是否出现在当前 Header 块的 .valid_modes 参数中。
+		/// 只扫描当前 Header 到下一个 Header 之前的范围，避免跨 Header 误判。
+		/// </summary>
+		private bool HasValidModeForDynamicEffects(
+			ITextSnapshot snapshot,
+			int currentLineNumber,
+			string modeName)
+		{
+			int headerStartLine = FindHeaderStartLineAbove(snapshot, currentLineNumber);
+			if (headerStartLine < 0)
+				return false;
+
+			int headerEndLine = FindHeaderBlockEndLine(snapshot, headerStartLine, currentLineNumber);
+			for (int lineNumber = headerStartLine; lineNumber <= headerEndLine; lineNumber++)
+			{
+				ITextSnapshotLine line = snapshot.GetLineFromLineNumber(lineNumber);
+				string codeText = GetCodeTextBeforeComment(line.GetText());
+				List<Span> stringSpans = GetStringSpans(codeText);
+
+				foreach (RegexMatch validModesMatch in KeywordRegex.Matches(codeText))
+				{
+					if (!string.Equals(validModesMatch.Value, ".valid_modes", StringComparison.Ordinal) ||
+						stringSpans.Any(span => span.Contains(validModesMatch.Index)))
+						continue;
+
+					foreach (ParsedArgument argument in ParseArgumentsUntilNextKeywordAcrossLines(
+						snapshot,
+						line,
+						validModesMatch.Index + validModesMatch.Length))
+					{
+						if (string.Equals(argument.Value, modeName, StringComparison.Ordinal))
+							return true;
+					}
+				}
+			}
+
+			return false;
+		}
+		/// <summary>
 		/// 从指定行向上寻找最近的 Header 行。
 		///
 		/// 注意：
@@ -495,6 +534,22 @@ namespace For_the_Darkest_Dungeon.Error
 							isValid = false;
 						}
 
+						// 模式差分效果要求当前 Header 块中存在对应的可用模式定义。
+						// 模式差分规则只适用于技能类 Header，避免误伤 deaths_door 等普通效果字段。
+						if (isValid && currentHeader != null && AllowedEffectsHeaders.Contains(currentHeader) &&
+							keyword.EndsWith("_effects", StringComparison.Ordinal))
+						{
+							Match modeMatch = Regex.Match(keyword, @"^\.(?<mode>[^\s.]+)_effects$");
+							if (modeMatch.Success &&
+								!HasValidModeForDynamicEffects(snapshot, i, modeMatch.Groups["mode"].Value))
+							{
+								yield return new TagSpan<IErrorTag>(
+									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+									new ErrorTag(
+										PredefinedErrorTypeNames.SyntaxError,
+										"模式差分效果要求必须存在同行的可用模式定义"));
+							}
+						}
 						// 5. 关键字本身合法时，再检查其参数。
 						if (isValid && isDefinedInCurrentHeader)
 						{
@@ -516,12 +571,14 @@ namespace For_the_Darkest_Dungeon.Error
 								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
 								new ErrorTag(PredefinedErrorTypeNames.SyntaxError, errorMsg));
 						}
-						else if (keyword == ".was_killed_effects")
+						else if (currentHeader == "skill_reaction:" && keyword == ".was_killed_effects")
 						{
+							// skill_reaction 中保留该关键字，但提醒其目标与 effect 参数的严格限制。
 							yield return new TagSpan<IErrorTag>(
 								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
-								new ErrorTag(PredefinedErrorTypeNames.SyntaxError,
-								"请勿使用.was_killed_effects，以防引发真伤等各种击杀情况导致的游戏崩溃，请换用.was_killed_by_hero_effects或其他效果作为替代"));
+								new ErrorTag(PredefinedErrorTypeNames.Warning,
+								"若此处引用的effect的目标为target则必定造成游戏崩溃，希望对攻击者进行指向性的被杀反馈必须使用.was_killed_by_hero_effects\n" +
+								"若在此处使用目标为performer的effect则要求该effect必须显式写明.can_apply_on_death true .can_apply_on_corpse true，否则该eff将无效（但此时更建议使用death_reaction而非被杀反馈）"));
 						}
 					}
 				}

@@ -61,6 +61,7 @@ namespace For_the_Darkest_Dungeon.Completion
 
 			List<string> sourceList;
 			int start = curPos;
+			bool appendClosingQuote = false;
 
 			// 上下文逻辑切换
 			// 上下文逻辑切换
@@ -70,7 +71,8 @@ namespace For_the_Darkest_Dungeon.Completion
 					line.Start.Position,
 					curPos,
 					out sourceList,
-					out start))
+					out start,
+					out appendClosingQuote))
 			{
 				// sourceList 和 start 已经在 TryGetEffectParameterCompletion 里设置好
 			}
@@ -129,7 +131,12 @@ namespace For_the_Darkest_Dungeon.Completion
 
 			// 创建补全集
 			var completions = sourceList.Select(k =>
-				new Microsoft.VisualStudio.Language.Intellisense.Completion(k, k, "Darkest Dungeon", null, null)).ToList();
+				new Microsoft.VisualStudio.Language.Intellisense.Completion(
+					k,
+					appendClosingQuote ? k + "\"" : k,
+					"Darkest Dungeon",
+					null,
+					null)).ToList();
 
 			// 确保 Span 合法
 			var applicableTo = snapshot.CreateTrackingSpan(
@@ -328,10 +335,12 @@ namespace For_the_Darkest_Dungeon.Completion
 			int lineStart,
 			int curPos,
 			out List<string> sourceList,
-			out int argumentStart)
+			out int argumentStart,
+			out bool appendClosingQuote)
 		{
 			sourceList = null;
 			argumentStart = curPos;
+			appendClosingQuote = false;
 
 			// 找当前参数 token 的起点。
 			int tokenStart = curPos;
@@ -343,7 +352,22 @@ namespace For_the_Darkest_Dungeon.Completion
 				tokenStart--;
 			}
 
-			string currentArgument = snapshot.GetText(tokenStart, curPos - tokenStart);
+			string rawArgument = snapshot.GetText(tokenStart, curPos - tokenStart);
+			string currentArgument = rawArgument;
+
+			// 引号参数从左引号之后开始匹配，左引号保留在原文中。
+			if (rawArgument.StartsWith("\"", StringComparison.Ordinal))
+			{
+				if (rawArgument.Count(character => character == '"') % 2 == 0)
+				{
+					return false;
+				}
+
+				currentArgument = rawArgument.Substring(1);
+				argumentStart = tokenStart + 1;
+				// 如果光标后紧邻位置已经是右引号，则只替换内容，不再重复插入右引号。
+				appendClosingQuote = curPos >= snapshot.Length || snapshot[curPos] != '"';
+			}
 
 			// 如果当前正在输入的是新关键字，则不要误触发参数补全。
 			if (currentArgument.StartsWith(".", StringComparison.Ordinal))
@@ -378,10 +402,16 @@ namespace For_the_Darkest_Dungeon.Completion
 				values.Count == 0)
 				return false;
 
-			argumentStart = tokenStart;
+			if (!appendClosingQuote)
+			{
+				argumentStart = tokenStart;
+			}
 
 			sourceList = FuzzyCompletionCache.GetMatches(
-				values,
+				BooleanCompletionPreferenceProvider.GetCompletionValues(
+					values,
+					ReferenceEquals(values, DarkestEffectsData.StrBoolValues),
+					DarkestEffectsData.DoubleBoolKeywords.Contains(keyword)),
 				currentArgument);
 
 			return sourceList != null && sourceList.Count > 0;

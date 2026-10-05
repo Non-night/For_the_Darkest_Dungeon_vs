@@ -79,6 +79,7 @@ namespace For_the_Darkest_Dungeon.Completion
 
 				List<string> resultList = null;
 				int startPos = curPos;
+				bool appendClosingQuote = false;
 
 				// 2. 获取当前活动 Header。
 				string activeHeader = GetActiveHeader(snapshot, line.LineNumber);
@@ -90,7 +91,19 @@ namespace For_the_Darkest_Dungeon.Completion
 				bool currentTokenStartsWithDot = TryGetCurrentToken(lineTextUntilCaret, out string currentToken)
 					&& currentToken.StartsWith(".", StringComparison.Ordinal);
 
-				if (!currentTokenStartsWithDot &&
+				if (TryGetQuotedStaticValueCompletion(
+						snapshot,
+						lineTextUntilCaret,
+						line.Start.Position,
+						curPos,
+						activeHeader,
+						out resultList,
+						out startPos,
+						out appendClosingQuote))
+				{
+					// 引号参数已完成识别，候选替换范围从左引号之后开始。
+				}
+				else if (!currentTokenStartsWithDot &&
 					!string.IsNullOrEmpty(activeHeader) &&
 					DarkestInfoData.InfoContextMap.TryGetValue(activeHeader, out List<string> keywords))
 				{
@@ -110,7 +123,7 @@ namespace For_the_Darkest_Dungeon.Completion
 						string foundKeyword = keywords.FirstOrDefault(keyword => trimmedText.EndsWith(keyword));
 						if (foundKeyword != null)
 						{
-							resultList = DarkestInfoData.GetValuesForKeyword(activeHeader, foundKeyword);
+							resultList = GetCompletionValues(activeHeader, foundKeyword);
 							startPos = curPos;
 						}
 						else
@@ -202,7 +215,7 @@ namespace For_the_Darkest_Dungeon.Completion
 						resultList
 							.Select(item => new Microsoft.VisualStudio.Language.Intellisense.Completion(
 								item,
-								item,
+								appendClosingQuote ? item + "\"" : item,
 								contextText,
 								null,
 								null))
@@ -413,6 +426,72 @@ namespace For_the_Darkest_Dungeon.Completion
 				return false;
 			}
 
+			/// <summary>
+			/// 识别当前未闭合的引号参数，并使用左引号后的内容进行模糊匹配。
+			/// </summary>
+			private bool TryGetQuotedStaticValueCompletion(
+				ITextSnapshot snapshot,
+				string lineTextUntilCaret,
+				int lineStartPosition,
+				int curPos,
+				string activeHeader,
+				out List<string> resultList,
+				out int startPos,
+				out bool appendClosingQuote)
+			{
+				resultList = null;
+				startPos = lineStartPosition + lineTextUntilCaret.Length;
+				appendClosingQuote = false;
+
+				if (string.IsNullOrEmpty(activeHeader) ||
+					string.IsNullOrEmpty(lineTextUntilCaret) ||
+					lineTextUntilCaret[lineTextUntilCaret.Length - 1] != '"')
+				{
+					return false;
+				}
+
+				// 只有奇数个引号才表示当前仍处于未闭合字符串中。
+				if (lineTextUntilCaret.Count(character => character == '"') % 2 == 0)
+				{
+					return false;
+				}
+
+				int openingQuote = lineTextUntilCaret.LastIndexOf('\"');
+				string beforeQuote = lineTextUntilCaret.Substring(0, openingQuote).TrimEnd();
+				string keyword = beforeQuote
+					.Split(new[] { ' ', '\t', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+					.LastOrDefault();
+
+				if (string.IsNullOrEmpty(keyword))
+				{
+					return false;
+				}
+
+				List<string> values = GetCompletionValues(activeHeader, keyword);
+				if (values == null || values.Count == 0)
+				{
+					return false;
+				}
+
+				string currentInput = lineTextUntilCaret.Substring(openingQuote + 1);
+				resultList = FuzzyCompletionCache.GetMatches(values, currentInput);
+				startPos = lineStartPosition + openingQuote + 1;
+				// 如果光标后紧邻位置已经是右引号，则只替换内容，不再重复插入右引号。
+				appendClosingQuote = curPos >= snapshot.Length || snapshot[curPos] != '"';
+
+				return resultList != null && resultList.Count > 0;
+			}
+
+			private List<string> GetCompletionValues(string activeHeader, string keyword)
+			{
+				List<string> values = DarkestInfoData.GetValuesForKeyword(activeHeader, keyword);
+				if (values == null)
+					return null;
+
+				bool isCharacterBoolean = ReferenceEquals(values, DarkestInfoData.KeywordValueMap["BOOL"]);
+				return BooleanCompletionPreferenceProvider.GetCompletionValues(values, isCharacterBoolean, false);
+			}
+
 			private bool TryGetContinuousValueCompletionForOneKeyword(
 				string lineTextUntilCaret,
 				int lineStartPosition,
@@ -539,7 +618,7 @@ namespace For_the_Darkest_Dungeon.Completion
 				if (!values.Any(value => lastWord.EndsWith(value)))
 					return false;
 
-				resultList = DarkestInfoData.GetValuesForKeyword(activeHeader, keyword);
+				resultList = GetCompletionValues(activeHeader, keyword);
 				startPos = curPos;
 				return resultList != null && resultList.Count > 0;
 			}
