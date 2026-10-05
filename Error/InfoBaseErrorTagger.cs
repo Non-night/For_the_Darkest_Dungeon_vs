@@ -540,16 +540,36 @@ namespace For_the_Darkest_Dungeon.Error
 							keyword.EndsWith("_effects", StringComparison.Ordinal))
 						{
 							Match modeMatch = Regex.Match(keyword, @"^\.(?<mode>[^\s.]+)_effects$");
-							if (modeMatch.Success &&
-								!HasValidModeForDynamicEffects(snapshot, i, modeMatch.Groups["mode"].Value))
+							if (modeMatch.Success)
 							{
-								yield return new TagSpan<IErrorTag>(
-									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
-									new ErrorTag(
-										PredefinedErrorTypeNames.SyntaxError,
-										"模式差分效果要求必须存在同行的可用模式定义"));
+								bool hasValidMode = HasValidModeForDynamicEffects(
+									snapshot,
+									i,
+									modeMatch.Groups["mode"].Value);
+
+								if (!hasValidMode)
+								{
+									yield return new TagSpan<IErrorTag>(
+										new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
+										new ErrorTag(
+											PredefinedErrorTypeNames.SyntaxError,
+											"模式差分效果要求必须存在同行的可用模式定义"));
+								}
+								else
+								{
+									// 仅对技能 Header 中确实声明了可用模式的模式差分 effect 检查参数数量。
+									foreach (ITagSpan<IErrorTag> argumentCountError in ValidateDynamicEffectArgumentCount(
+										snapshot,
+										line,
+										keyword,
+										match.Index + match.Length))
+									{
+										yield return argumentCountError;
+									}
+								}
 							}
 						}
+
 						// 5. 关键字本身合法时，再检查其参数。
 						if (isValid && isDefinedInCurrentHeader)
 						{
@@ -860,6 +880,32 @@ namespace For_the_Darkest_Dungeon.Error
 		#endregion
 
 		#region 参数检查
+
+		/// <summary>
+		/// 单独检查模式差分 effect 的引用数量，避免动态关键字进入普通固定参数校验。
+		/// </summary>
+		private IEnumerable<ITagSpan<IErrorTag>> ValidateDynamicEffectArgumentCount(
+			ITextSnapshot snapshot,
+			ITextSnapshotLine line,
+			string keyword,
+			int keywordEndIndex)
+		{
+			const int maxArgumentCount = 6;
+			List<ParsedArgument> arguments = ParseArgumentsUntilNextKeywordAcrossLines(
+				snapshot,
+				line,
+				keywordEndIndex);
+
+			if (arguments.Count > maxArgumentCount)
+			{
+				ParsedArgument firstExtraArgument = arguments[maxArgumentCount];
+				yield return CreateError(
+					snapshot,
+					firstExtraArgument.StartPosition,
+					firstExtraArgument.Length,
+					$"模式差分 effect {keyword} 的参数数量不能超过 {maxArgumentCount} 个，当前数量为 {arguments.Count}");
+			}
+		}
 
 		/// <summary>
 		/// 检查当前关键字的参数。
