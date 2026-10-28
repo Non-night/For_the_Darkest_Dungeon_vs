@@ -536,7 +536,8 @@ namespace For_the_Darkest_Dungeon.Error
 
 						// 模式差分效果要求当前 Header 块中存在对应的可用模式定义。
 						// 模式差分规则只适用于技能类 Header，避免误伤 deaths_door 等普通效果字段。
-						if (isValid && currentHeader != null && AllowedEffectsHeaders.Contains(currentHeader) &&
+						// 已登记的合法静态关键字必须严格排除，不能被当作模式差分 effect 再次检查。
+						if (isValid && !isKnownStaticKeyword && currentHeader != null && AllowedEffectsHeaders.Contains(currentHeader) &&
 							keyword.EndsWith("_effects", StringComparison.Ordinal))
 						{
 							Match modeMatch = Regex.Match(keyword, @"^\.(?<mode>[^\s.]+)_effects$");
