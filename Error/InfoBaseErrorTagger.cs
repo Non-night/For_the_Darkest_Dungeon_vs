@@ -383,6 +383,25 @@ namespace For_the_Darkest_Dungeon.Error
 						? lineText.Substring(0, commentIndex)
 						: lineText;
 
+					// 单行长度包含代码区的空格和制表符，但不统计 // 后的注释内容。
+					const string lineLengthMessage = "单行长度大于511字符将发生就截断，请使用分行写法缩短单行长度";
+					if (codeText.Length == 511)
+					{
+						yield return CreateWarning(
+							snapshot,
+							line.Start.Position,
+							codeText.Length,
+							lineLengthMessage);
+					}
+					else if (codeText.Length > 511)
+					{
+						yield return CreateError(
+							snapshot,
+							line.Start.Position,
+							codeText.Length,
+							lineLengthMessage);
+					}
+
 					// 空行、纯注释行直接跳过。
 					if (string.IsNullOrWhiteSpace(codeText))
 						continue;

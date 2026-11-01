@@ -1,7 +1,7 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
-    <Identity Id="For_the_Darkest_Dungeon.47e77e32-9afb-49d3-aaa2-628132f2de5b" Version="3.1.8" Language="zh-CN" Publisher="No_night" />
+    <Identity Id="For_the_Darkest_Dungeon.47e77e32-9afb-49d3-aaa2-628132f2de5b" Version="3.1.9" Language="zh-CN" Publisher="No_night" />
     <DisplayName>For The Darkest Dungeon</DisplayName>
     <Description xml:space="preserve">实现了effects.darkest，info.darkest/art.darkest/override.darkest的高亮和自动补全，并且现有一定的语法检查功能
 实现了colours.darkest的自动着色和调色盘功能
@@ -22,7 +22,7 @@ colours的自动渲染和调色盘功能可在设置中关闭
     <Dependency Id="Microsoft.Framework.NDP" DisplayName="Microsoft .NET Framework" Version="[4.5,)" d:Source="Manual" />
   </Dependencies>
   <Prerequisites>
-    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" DisplayName="Visual Studio core editor" Version="[17.0,18.0)" />
+    <Prerequisite Id="Microsoft.VisualStudio.Component.CoreEditor" DisplayName="Visual Studio core editor" Version="[17.0,19.0)" />
   </Prerequisites>
   <Assets>
     <Asset Type="Microsoft.VisualStudio.VsPackage" Path="|%CurrentProject%;PkgdefProjectOutputGroup|" d:Source="Project" d:ProjectName="%CurrentProject%" />
