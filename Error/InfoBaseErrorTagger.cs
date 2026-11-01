@@ -383,6 +383,25 @@ namespace For_the_Darkest_Dungeon.Error
 						? lineText.Substring(0, commentIndex)
 						: lineText;
 
+					// 单行长度包含代码区的空格和制表符，但不统计 // 后的注释内容。
+					const string lineLengthMessage = "单行长度大于511字符将发生就截断，请使用分行写法缩短单行长度";
+					if (codeText.Length == 511)
+					{
+						yield return CreateWarning(
+							snapshot,
+							line.Start.Position,
+							codeText.Length,
+							lineLengthMessage);
+					}
+					else if (codeText.Length > 511)
+					{
+						yield return CreateError(
+							snapshot,
+							line.Start.Position,
+							codeText.Length,
+							lineLengthMessage);
+					}
+
 					// 空行、纯注释行直接跳过。
 					if (string.IsNullOrWhiteSpace(codeText))
 						continue;
@@ -536,7 +555,8 @@ namespace For_the_Darkest_Dungeon.Error
 
 						// 模式差分效果要求当前 Header 块中存在对应的可用模式定义。
 						// 模式差分规则只适用于技能类 Header，避免误伤 deaths_door 等普通效果字段。
-						if (isValid && currentHeader != null && AllowedEffectsHeaders.Contains(currentHeader) &&
+						// 已登记的合法静态关键字必须严格排除，不能被当作模式差分 effect 再次检查。
+						if (isValid && !isKnownStaticKeyword && currentHeader != null && AllowedEffectsHeaders.Contains(currentHeader) &&
 							keyword.EndsWith("_effects", StringComparison.Ordinal))
 						{
 							Match modeMatch = Regex.Match(keyword, @"^\.(?<mode>[^\s.]+)_effects$");
