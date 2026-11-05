@@ -33,7 +33,7 @@ namespace For_the_Darkest_Dungeon.Error
 			".dotBurn"
 		};
 
-		// 以下关键字只对当前 effect 的 this_trinket 目标有意义。
+		// 以下关键字需要检查饰品目标；允许的目标取决于具体字段。
 		private static readonly string[] TrinketTargetKeywords = new[]
 		{
 			".trigger_limit_minimum_increase",
@@ -41,7 +41,10 @@ namespace For_the_Darkest_Dungeon.Error
 			".set_trigger_limit",
 			".gain_random_trinket",
 			".gain_trinket",
-			".destroy_trinket"
+			".destroy_trinket",
+			// 新增的减少上限字段也需要指定饰品对象。
+			".trigger_limit_minimum_decrease",
+			".trigger_limit_maximum_decrease"
 		};
 
 		internal EffectErrorTagger(ITextBuffer buffer)
@@ -788,27 +791,43 @@ namespace For_the_Darkest_Dungeon.Error
 
 						if (TrinketTargetKeywords.Contains(keyword))
 						{
-							// .destroy_trinket 只有参数为 true（忽略大小写）时才需要检查目标。
-							bool requiresThisTrinketTarget = keyword != ".destroy_trinket";
-							if (!requiresThisTrinketTarget &&
-								TryGetKeywordParameterValue(codeText, keyword, stringSpans, out string destroyTrinketValue))
+							// 目标与效果字段可以分行书写，始终只检查当前 effect 整块。
+							string trinketCodeText = codeText;
+							if (TryGetEffectBlockCodeRange(snapshot, i, out int trinketBlockStart, out int trinketBlockEnd, out string trinketBlockCodeText))
 							{
-								requiresThisTrinketTarget = string.Equals(
+								trinketCodeText = trinketBlockCodeText;
+							}
+							var trinketStringSpans = _stringRegex.Matches(trinketCodeText).Cast<RegexMatch>()
+								.Select(m => new Span(m.Index, m.Length)).ToList();
+
+							// .destroy_trinket 仅在参数为 true 时生效并检查目标。
+							bool requiresTrinketTarget = keyword != ".destroy_trinket";
+							if (!requiresTrinketTarget &&
+								TryGetKeywordParameterValue(trinketCodeText, keyword, trinketStringSpans, out string destroyTrinketValue))
+							{
+								requiresTrinketTarget = string.Equals(
 									destroyTrinketValue,
 									"true",
 									StringComparison.OrdinalIgnoreCase);
 							}
 
-							// 满足检查条件时，同一条 effect 语句中的 .target 参数必须为 this_trinket。
-							if (requiresThisTrinketTarget &&
-								(!TryGetKeywordParameterValue(codeText, ".target", stringSpans, out string targetValue) ||
-								 !string.Equals(targetValue, "this_trinket", StringComparison.Ordinal)))
+							// 设置与新增减少上限字段接受两种饰品目标；其他旧字段保持原限制。
+							bool allowsOtherTrinket = keyword == ".set_trigger_limit" ||
+								keyword == ".trigger_limit_minimum_decrease" ||
+								keyword == ".trigger_limit_maximum_decrease";
+							bool hasTarget = TryGetKeywordParameterValue(trinketCodeText, ".target", trinketStringSpans, out string targetValue);
+							bool isValidTarget = hasTarget &&
+								(string.Equals(targetValue, "this_trinket", StringComparison.Ordinal) ||
+								 (allowsOtherTrinket && string.Equals(targetValue, "other_trinket", StringComparison.Ordinal)));
+
+							if (requiresTrinketTarget && !isValidTarget)
 							{
+								string allowedTargets = allowsOtherTrinket ? "this_trinket 或 other_trinket" : "this_trinket";
 								yield return new TagSpan<IErrorTag>(
 									new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
 									new ErrorTag(
 										PredefinedErrorTypeNames.Warning,
-										$"{keyword} 要求同一条 effect 的 .target 参数为 this_trinket"));
+										$"{keyword} 要求同一条 effect 的 .target 参数为 {allowedTargets}"));
 							}
 						}
 
@@ -1221,15 +1240,6 @@ namespace For_the_Darkest_Dungeon.Error
 								}
 							}
 						}
-						if (keyword == ".daze")
-						{
-							yield return new TagSpan<IErrorTag>(
-								new SnapshotSpan(snapshot, line.Start + match.Index, match.Length),
-								new ErrorTag(
-									PredefinedErrorTypeNames.Suggestion,
-									$"不建议使用daze，若要使用，请保证理解其效果并避免崩溃与无效问题"));
-						}
-
 						if (keyword == ".guard" || keyword == ".clearguarded" || keyword == ".clearguarding")
 						{
 							var guardParamMatch = _nextParamRegex.Match(codeText.Substring(match.Index + match.Length));
@@ -1335,6 +1345,19 @@ namespace For_the_Darkest_Dungeon.Error
 								string actualValue = isQuoted ? valInQuote : valPlain;
 
 								bool isParamValid = validValues.Contains(actualValue);
+								// Buff 来源和抗性 ID 的示例不构成完整枚举，只校验非空，保留已知值补全。
+								if (keyword == ".requires_bsrc" || keyword == ".force_resist_type")
+								{
+									isParamValid = !string.IsNullOrWhiteSpace(actualValue);
+								}
+								// 自由副类型须按同一 effect 块的 Buff 主类型判断，不能被固定枚举提前拒绝。
+								if (keyword == ".buff_sub_type" &&
+									TryGetEffectBlockCodeRange(snapshot, i, out int subTypeBlockStart, out int subTypeBlockEnd, out string subTypeBlockCodeText) &&
+									TryGetFirstEffectBlockParameterValue(subTypeBlockCodeText, ".buff_type", out string owningBuffType) &&
+									DarkestEffectsData.SubFreeBuffTypes.Contains(owningBuffType))
+								{
+									isParamValid = !string.IsNullOrWhiteSpace(actualValue);
+								}
 								bool isInvalidParamAllowed = false;
 
 								// 计算参数值在原始行中的范围，供特殊警告精确标记到参数本身使用。

@@ -74,14 +74,23 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
 			".trigger_limit_maximum_increase", ".set_trigger_limit", ".gain_random_quirk_positive_percentage", ".gain_random_quirk_negative",
 			".gain_random_trinket", ".gain_trinket", ".guaranteed_town_event", ".dotBurn", ".dot_irresistible",
 			".requires_burning_target", ".requires_not_burning_target", ".is_in_inventory", ".bonus_action_next_turn",
-			".cure_burn", ".controlled_burn_amount", ".controlled_burn_duration", ".requires_kill_target", ".destroy_trinket", ".can_apply_on_corpse"
+			".cure_burn", ".controlled_burn_amount", ".controlled_burn_duration", ".requires_kill_target", ".destroy_trinket", ".can_apply_on_corpse",
+            // 新版 Effect 字段；自由 ID 参数不放入固定值枚举。
+            ".gain_loot", ".health_damage_percent", ".cure_mortality", ".cure_quirk_tags",
+            ".force_resist_type", ".requires_status", ".requires_bsrc", ".description_tooltip_id",
+            ".suppress_resist_popup", ".suppress_zero_heal_popup", ".suppress_bark",
+            ".trigger_limit_minimum_decrease", ".trigger_limit_maximum_decrease"
 		};
 
         // 参数表
         // target 参数
         public static readonly List<string> TargetValues = new List<string>
         {
-            "performer", "performer_group", "performer_group_other", "target", "target_group", "target_group_other", "target_enemy_group", "global", "target_enemy_rank", "this_trinket", "target_enemy_random"
+            "performer", "performer_group", "performer_group_other", "target", "target_group", "target_group_other", "target_enemy_group", "global", "target_enemy_rank", "this_trinket", "target_enemy_random",
+            // 新版可选目标：随机英雄、相邻单位及另一饰品。
+            "target_hero_random", "performer_adjacent_random", "performer_adjacents",
+            "performer_adjacent_front", "performer_adjacent_behind", "target_adjacent_random",
+            "target_adjacents", "target_adjacent_front", "target_adjacent_behind", "other_trinket"
 		};
         // curio_result_type 参数
         public static readonly List<string> CurioResultValues = new List<string>
@@ -124,9 +133,18 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             "quirk_tag_evolution_duration", "deathblow_chance", "heartattack_stress_heal_percent",
             "ignore_guard", "buff_duration_percent", "riposte_duration_percent",
             "hp_dot_burn", "hp_dot_burn_decay_percent", "hp_dot_burn_amount_percent",
-            "hp_dot_burn_amount_received_percent", "wildfire_apply_adjacent_targets", "cure_burn_chance", "cure_burn_received_chance"
+            "hp_dot_burn_amount_received_percent", "wildfire_apply_adjacent_targets", "cure_burn_chance", "cure_burn_received_chance",
+            // 新版 Buff 主类型；动态 ID 对应的副类型另行校验。
+            "effect_chance", "crit_dmg_multiply", "crit_dmg_add", "heal_crit_chance_add",
+            "heal_crit_chance_multiply", "hp_heal_amount_received", "disable_combat_skill"
 
 		};
+        // 偷取类型仍沿用原有目录；不能因新增 Buff 类型而自动扩大可偷取范围。
+        public static readonly List<string> StealBuffStatTypeValues = BuffTypeValues.FindAll(value =>
+            value != "effect_chance" && value != "crit_dmg_multiply" && value != "crit_dmg_add" &&
+            value != "heal_crit_chance_add" && value != "heal_crit_chance_multiply" &&
+            value != "hp_heal_amount_received" && value != "disable_combat_skill");
+
         // Buff Sub Type 参数
         public static readonly List<string> BuffSubTypeValues = new List<string>
         {
@@ -214,10 +232,14 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".target", TargetValues },
             { ".curio_result_type", CurioResultValues },
             { ".keyStatus", KeyStatusValues },
+            // 新版状态前提和抗性类型使用对应枚举；Effect、技能等自由 ID 不受枚举限制。
+            { ".requires_status", KeyStatusValues },
+            { ".requires_bsrc", BuffSourceValues },
+            { ".force_resist_type", new List<string> { "stun", "move", "poison", "bleed", "disease", "debuff", "death_blow", "trap" } },
             
             // buff type
             { ".buff_type", BuffTypeValues },
-            { ".steal_buff_stat_type", BuffTypeValues },
+            { ".steal_buff_stat_type", StealBuffStatTypeValues },
 
             // buff sub type
             { ".buff_sub_type", BuffSubTypeValues },
@@ -272,6 +294,8 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".cure_disease", NumBoolValues },
             { ".undaze", NumBoolValues },
             { ".cure_burn", NumBoolValues },
+            // 与其他清除状态效果保持一致，恢复减益清除使用数字布尔参数。
+            { ".cure_mortality", NumBoolValues },
 
             // 字符布尔类
             { ".on_hit", StrBoolValues },
@@ -308,7 +332,11 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
             { ".bonus_action_next_turn", StrBoolValues },
             { ".requires_kill_target", StrBoolValues },
             { ".destroy_trinket", StrBoolValues },
-            { ".can_apply_on_corpse", StrBoolValues }
+            { ".can_apply_on_corpse", StrBoolValues },
+            // 新版浮字和自动喊话开关沿用字符布尔偏好及大小写校验。
+            { ".suppress_resist_popup", StrBoolValues },
+            { ".suppress_zero_heal_popup", StrBoolValues },
+            { ".suppress_bark", StrBoolValues }
         };
 
         // 双布尔类关键字（用于报错检验）
@@ -343,12 +371,16 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
 		// 必须写副类型的主类型
         public static readonly HashSet<string> MustHaveSubBuffTypes = new HashSet<string>
         {
-            "combat_stat_multiply", "combat_stat_add", "resistance", "activity_side_effect_chance", "disable_combat_skill_attribute"
+            "combat_stat_multiply", "combat_stat_add", "resistance", "activity_side_effect_chance", "disable_combat_skill_attribute",
+            // 这两类分别使用 Effect ID 和技能 ID，必须显式提供副类型。
+            "effect_chance", "disable_combat_skill"
         };
 		// 副类型可以自由填写的主类型
 		public static readonly HashSet<string> SubFreeBuffTypes = new HashSet<string>
         {
-			"upgrade_discount", "riposte", "quirk_tag_evolution_duration"
+			"upgrade_discount", "riposte", "quirk_tag_evolution_duration",
+            // 动态副类型由所属 Buff 主类型决定，不受固定枚举限制。
+            "effect_chance", "disable_combat_skill"
 		};
 
 	}
@@ -611,7 +643,9 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".does_count_as_monster_size_for_monster_brain", ".does_count_as_guardable_for_monster_brain",
                 ".can_be_missed", ".can_be_hit", ".is_valid_friendly_target", ".can_be_damaged_directly",
                 ".can_be_random_target", ".can_be_guarded", ".remove_on_retreat", ".living_other_enemy_buffs",
-                ".living_hero_buff_instance_ids", ".disabled_act_out_combat_start_turn_types"
+                ".living_hero_buff_instance_ids", ".disabled_act_out_combat_start_turn_types",
+                // 新版 battle_modifier 的生命值缩放开关。
+                ".ignore_hp_scale"
             } },
             { "death_class:", new List<string> {
                 ".monster_class_id", ".random_monster_class_ids", ".random_monster_class_chances",
@@ -706,7 +740,9 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".can_display_performer_selection_after_turn",
 				".requires_burning",
 				".dmg_per_burn_stack",
-				".copy_burn_behind"
+				".copy_burn_behind",
+                // 新版英雄战斗技能专属开关，不扩展到其他技能 Header。
+                ".ai_valid", ".counts_towards_skill_limit", ".skill_visible", ".force_selection"
 			} },
             { "combat_move_skill:", new List<string> {
                 ".id",
@@ -893,7 +929,9 @@ namespace For_the_Darkest_Dungeon.DefinitionDarkest
                 ".nil", ".generation_guaranteed", ".condensed_tooltip_type",
                 ".condensed_tooltip_stats", ".condensed_tooltip_effects", ".is_generation_enabled",
                 ".can_select_combat_skills", ".has_caretaker_goals", ".self_target_valid",
-				".requires_burning", ".copy_burn_behind", ".is_valid_on_burn_dot"
+				".requires_burning", ".copy_burn_behind", ".is_valid_on_burn_dot",
+                // 新增开关只在其所属 Header 允许表中启用。
+                ".ai_valid", ".counts_towards_skill_limit", ".skill_visible", ".force_selection", ".ignore_hp_scale"
 			};
             return boolKeys.Contains(keyword);
         }
